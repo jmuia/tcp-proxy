@@ -2,15 +2,21 @@ package main
 
 import (
 	"io"
+	"math/rand"
 	"net"
 	"time"
 
 	"github.com/pkg/errors"
 )
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
 type ProxyConfig struct {
-	laddr   string
-	timeout time.Duration
+	laddr    string
+	timeout  time.Duration
+	services []string
 }
 
 type TCPProxy struct {
@@ -82,7 +88,7 @@ func (t *TCPProxy) acceptConns() {
 func (t *TCPProxy) handleConn(src net.Conn) {
 	defer src.Close()
 
-	service := "localhost:8000"
+	service := t.cfg.services[rand.Intn(len(t.cfg.services))]
 
 	dst, err := net.DialTimeout("tcp", service, t.cfg.timeout)
 	if err != nil {
@@ -124,8 +130,9 @@ func (t *TCPProxy) proxyConn(src net.Conn, dst net.Conn) {
 
 func main() {
 	proxyConfig := ProxyConfig{
-		laddr:   "localhost:8080",
-		timeout: 5 * time.Second,
+		laddr:    "localhost:8080",
+		timeout:  5 * time.Second,
+		services: []string{"localhost:8000"},
 	}
 	tcpProxy := NewTCPProxy(proxyConfig)
 	err := tcpProxy.Run()
