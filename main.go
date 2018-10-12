@@ -14,35 +14,68 @@ type ProxyConfig struct {
 }
 
 type TCPProxy struct {
-	laddr   string
-	timeout time.Duration
+	cfg       ProxyConfig
+	ln        net.Listener
+	shutdownc chan struct{}
+	exitc     chan error
 }
 
-func NewTCPProxy(cfg *ProxyConfig) *TCPProxy {
+func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
 	return &TCPProxy{
-		laddr:   cfg.laddr,
-		timeout: cfg.timeout,
+		cfg:       cfg,
+		shutdownc: make(chan struct{}),
+		exitc:     make(chan error, 1),
 	}
+}
+
+func (t *TCPProxy) Shutdown() {
+	logger.Info("shutting down...")
+	close(t.shutdownc)
+}
+
+func (t *TCPProxy) Run() error {
+	err := t.Start()
+	if err != nil {
+		return err
+	}
+	return t.wait()
 }
 
 func (t *TCPProxy) Start() error {
 	logger.Info("starting proxy...")
 
-	l, err := net.Listen("tcp", t.laddr)
+	var err error
+	t.ln, err = net.Listen("tcp", t.cfg.laddr)
 	if err != nil {
-		return errors.Wrapf(err, "failed to listen on %s", t.laddr)
+		return errors.Wrapf(err, "failed to listen on %s", t.cfg.laddr)
 	}
-	defer l.Close()
-	logger.Info("listening on ", t.laddr)
+	logger.Info("listening on ", t.ln.Addr())
+
+	go t.acceptConns()
+	return nil
+}
+
+func (t *TCPProxy) wait() error {
+	return <-t.exitc
+}
+
+func (t *TCPProxy) acceptConns() {
+	defer t.ln.Close()
+	defer close(t.exitc)
 
 	for {
-		src, err := l.Accept()
-		if err != nil {
-			logger.Error(errors.Wrapf(err, "error accepting connection"))
-			continue
+		select {
+		case <-t.shutdownc:
+			return
+		default:
+			src, err := t.ln.Accept()
+			if err != nil {
+				t.exitc <- err
+				return
+			}
+			logger.Info("accepted connection from ", src.RemoteAddr())
+			go t.handleConn(src)
 		}
-		logger.Info("accepted connection from ", src.RemoteAddr())
-		go t.handleConn(src)
 	}
 }
 
@@ -51,7 +84,7 @@ func (t *TCPProxy) handleConn(src net.Conn) {
 
 	service := "localhost:8000"
 
-	dst, err := net.DialTimeout("tcp", service, t.timeout)
+	dst, err := net.DialTimeout("tcp", service, t.cfg.timeout)
 	if err != nil {
 		// TODO: attempt a different backend.
 		logger.Error(errors.Wrapf(err, "error dialing service %s", service))
@@ -94,8 +127,8 @@ func main() {
 		laddr:   "localhost:8080",
 		timeout: 5 * time.Second,
 	}
-	tcpProxy := NewTCPProxy(&proxyConfig)
-	err := tcpProxy.Start()
+	tcpProxy := NewTCPProxy(proxyConfig)
+	err := tcpProxy.Run()
 	if err != nil {
 		logger.Error(err)
 	}
