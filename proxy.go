@@ -84,6 +84,7 @@ func (t *TCPProxy) acceptConns() {
 		default:
 			src, err := t.ln.Accept()
 			if err != nil {
+				t.Shutdown()
 				t.exitc <- err
 				return
 			}
