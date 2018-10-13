@@ -14,12 +14,6 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-type ProxyConfig struct {
-	laddr    string
-	timeout  time.Duration
-	services []string
-}
-
 type TCPProxy struct {
 	cfg       ProxyConfig
 	ln        net.Listener
@@ -35,22 +29,6 @@ func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
 		shutdownc: make(chan struct{}),
 		exitc:     make(chan error, 1),
 	}
-}
-
-func (t *TCPProxy) Shutdown() {
-	logger.Info("shutting down...")
-	prev := atomic.SwapUint32(&t.state, STOPPED)
-	if prev != STOPPED {
-		close(t.shutdownc)
-	}
-}
-
-func (t *TCPProxy) Run() error {
-	err := t.Start()
-	if err != nil {
-		return err
-	}
-	return <-t.exitc
 }
 
 func (t *TCPProxy) Start() error {
@@ -71,6 +49,22 @@ func (t *TCPProxy) Start() error {
 
 	go t.acceptConns()
 	return nil
+}
+
+func (t *TCPProxy) Shutdown() {
+	logger.Info("shutting down...")
+	prev := atomic.SwapUint32(&t.state, STOPPED)
+	if prev != STOPPED {
+		close(t.shutdownc)
+	}
+}
+
+func (t *TCPProxy) Run() error {
+	err := t.Start()
+	if err != nil {
+		return err
+	}
+	return <-t.exitc
 }
 
 func (t *TCPProxy) acceptConns() {
@@ -134,18 +128,5 @@ func (t *TCPProxy) proxyConn(src net.Conn, dst net.Conn) {
 	err := <-errc
 	if err != nil {
 		logger.Error(errors.Wrapf(err, "error proxying data from %v to %v", src.RemoteAddr(), dst.RemoteAddr()))
-	}
-}
-
-func main() {
-	proxyConfig := ProxyConfig{
-		laddr:    "localhost:8080",
-		timeout:  5 * time.Second,
-		services: []string{"localhost:8000"},
-	}
-	tcpProxy := NewTCPProxy(proxyConfig)
-	err := tcpProxy.Run()
-	if err != nil {
-		logger.Error(err)
 	}
 }
