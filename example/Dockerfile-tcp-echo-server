@@ -1,0 +1,9 @@
+FROM alpine:latest
+
+RUN apk add nmap-ncat
+
+COPY ./tcp-echo-server.sh .
+RUN chmod +x ./tcp-echo-server.sh
+
+ENTRYPOINT ["./tcp-echo-server.sh"]
+CMD ["8000"]

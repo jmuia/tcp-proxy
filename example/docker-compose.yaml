@@ -1,0 +1,33 @@
+version: '2'
+
+services:
+  tcp-proxy:
+    build:
+      context: ..
+    command: "-laddr :4000 service1:8000 service2:8000 service3:8000"
+    ports:
+      - "4000:4000"
+
+  service1:
+    build:
+      context: .
+      dockerfile: Dockerfile-tcp-echo-server
+    command: "8000"
+    expose:
+      - "8000"
+
+  service2:
+    build:
+      context: .
+      dockerfile: Dockerfile-tcp-echo-server
+    command: "8000"
+    expose:
+      - "8000"
+
+  service3:
+    build:
+      context: .
+      dockerfile: Dockerfile-tcp-echo-server
+    command: "8000"
+    expose:
+      - "8000"
