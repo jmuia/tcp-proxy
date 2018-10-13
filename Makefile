@@ -4,6 +4,6 @@ build:
 	go build
 
 run: build
-	./tcp-proxy 2>&1
+	./tcp-proxy localhost:8000
 
 .PHONY: run build
