@@ -4,6 +4,7 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -22,6 +23,7 @@ type ProxyConfig struct {
 type TCPProxy struct {
 	cfg       ProxyConfig
 	ln        net.Listener
+	state     ProxyState
 	shutdownc chan struct{}
 	exitc     chan error
 }
@@ -29,6 +31,7 @@ type TCPProxy struct {
 func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
 	return &TCPProxy{
 		cfg:       cfg,
+		state:     READY,
 		shutdownc: make(chan struct{}),
 		exitc:     make(chan error, 1),
 	}
@@ -36,7 +39,10 @@ func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
 
 func (t *TCPProxy) Shutdown() {
 	logger.Info("shutting down...")
-	close(t.shutdownc)
+	prev := atomic.SwapUint32(&t.state, STOPPED)
+	if prev != STOPPED {
+		close(t.shutdownc)
+	}
 }
 
 func (t *TCPProxy) Run() error {
@@ -44,7 +50,7 @@ func (t *TCPProxy) Run() error {
 	if err != nil {
 		return err
 	}
-	return t.wait()
+	return <-t.exitc
 }
 
 func (t *TCPProxy) Start() error {
@@ -57,12 +63,14 @@ func (t *TCPProxy) Start() error {
 	}
 	logger.Info("listening on ", t.ln.Addr())
 
+	swapped := atomic.CompareAndSwapUint32(&t.state, READY, RUNNING)
+	if !swapped {
+		t.ln.Close()
+		return errors.New("attempted to start proxy when not in READY state")
+	}
+
 	go t.acceptConns()
 	return nil
-}
-
-func (t *TCPProxy) wait() error {
-	return <-t.exitc
 }
 
 func (t *TCPProxy) acceptConns() {
