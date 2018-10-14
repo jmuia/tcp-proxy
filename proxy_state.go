@@ -14,16 +14,18 @@ const (
 )
 
 func (s ProxyState) String() string {
-	if s < NEW || s > STOPPED {
-		return "UNKNOWN"
-	}
 	strings := [...]string{
 		"NEW",
 		"STARTING",
 		"RUNNING",
 		"STOPPED",
 	}
-	return strings[s-1]
+	switch s {
+	case NEW, STARTING, RUNNING, STOPPED:
+		return strings[s-1]
+	default:
+		return "UNKNOWN"
+	}
 }
 
 func AtomicSwap(addr *ProxyState, new ProxyState) (prev ProxyState) {
