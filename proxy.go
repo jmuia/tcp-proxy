@@ -19,7 +19,7 @@ type TCPProxy struct {
 	state     ProxyState
 	shutdownc chan struct{}
 	exitc     chan error
-	services []Service
+	services  []Service
 }
 
 func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
@@ -51,6 +51,27 @@ func (t *TCPProxy) Start() error {
 	}
 
 	logger.Info("listening on ", t.ln.Addr())
+
+	// TODO: update load balancing based upon health checks.
+	// and actually kill this stuff on shutdown.
+	go func() {
+		hcs := make([]*TCPHealthCheck, len(t.services))
+		for i, s := range t.services {
+			hcs[i] = NewTCPHealthCheck(s.Addr(), 1*time.Second)
+		}
+		for range time.NewTicker(5 * time.Second).C {
+			for _, hc := range hcs {
+				go func() {
+					err := hc.Check()
+					if err != nil {
+						logger.Infof("%s failed health check: %s", hc.Addr(), err)
+					} else {
+						logger.Infof("%s passed health check", hc.Addr())
+					}
+				}()
+			}
+		}
+	}()
 
 	swapped = AtomicCompareAndSwap(&t.state, STARTING, RUNNING)
 	if !swapped {
