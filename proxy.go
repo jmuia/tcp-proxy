@@ -44,6 +44,7 @@ func (t *TCPProxy) Start() error {
 		t.Shutdown()
 		return errors.Wrapf(err, "failed to listen on %s", t.cfg.laddr)
 	}
+
 	logger.Info("listening on ", t.ln.Addr())
 
 	swapped = atomic.CompareAndSwapUint32(&t.state, STARTING, RUNNING)
@@ -57,8 +58,8 @@ func (t *TCPProxy) Start() error {
 }
 
 func (t *TCPProxy) Shutdown() {
-	logger.Info("shutting down...")
 	prev := atomic.SwapUint32(&t.state, STOPPED)
+	logger.Infof("shutting down in state %s", ProxyStateString(prev))
 	switch prev {
 	case NEW, STARTING:
 		close(t.shutdownc)
@@ -83,6 +84,15 @@ func (t *TCPProxy) exit() {
 	close(t.exitc)
 }
 
+func (t *TCPProxy) acceptTimeout(timeout time.Duration) (net.Conn, error) {
+	deadline := time.Now().Add(timeout)
+	err := t.ln.(*net.TCPListener).SetDeadline(deadline)
+	if err != nil {
+		return nil, err
+	}
+	return t.ln.Accept()
+}
+
 func (t *TCPProxy) acceptConns() {
 	defer t.exit()
 
@@ -92,7 +102,13 @@ func (t *TCPProxy) acceptConns() {
 		case <-t.shutdownc:
 			return
 		default:
-			src, err := t.ln.Accept()
+			// Accept() is blocking. Adds a timeout
+			// to ensure we're still checking for
+			// shutdown messages if the proxy is idle.
+			src, err := t.acceptTimeout(3 * time.Second)
+			if isTimeout(err) {
+				continue
+			}
 			if err != nil {
 				t.exitc <- err
 				t.Shutdown()
@@ -145,4 +161,12 @@ func (t *TCPProxy) proxyConn(src net.Conn, dst net.Conn) {
 	if err != nil {
 		logger.Error(errors.Wrapf(err, "error proxying data from %v to %v", src.RemoteAddr(), dst.RemoteAddr()))
 	}
+}
+
+func isTimeout(err error) bool {
+	if err == nil {
+		return false
+	}
+	opErr, ok := err.(*net.OpError)
+	return ok && opErr.Timeout()
 }
