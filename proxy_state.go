@@ -1,6 +1,10 @@
 package main
 
-type ProxyState = uint32
+import (
+	"sync/atomic"
+)
+
+type ProxyState uint32
 
 const (
 	NEW      ProxyState = 1
@@ -9,7 +13,7 @@ const (
 	STOPPED  ProxyState = 4
 )
 
-func ProxyStateString(s ProxyState) string {
+func (s ProxyState) String() string {
 	if s < NEW || s > STOPPED {
 		return "UNKNOWN"
 	}
@@ -19,5 +23,13 @@ func ProxyStateString(s ProxyState) string {
 		"RUNNING",
 		"STOPPED",
 	}
-	return strings[s - 1]
+	return strings[s-1]
+}
+
+func AtomicSwap(addr *ProxyState, new ProxyState) (prev ProxyState) {
+	return (ProxyState)(atomic.SwapUint32((*uint32)(addr), (uint32)(new)))
+}
+
+func AtomicCompareAndSwap(addr *ProxyState, old, new ProxyState) bool {
+	return atomic.CompareAndSwapUint32((*uint32)(addr), (uint32)(old), (uint32)(new))
 }

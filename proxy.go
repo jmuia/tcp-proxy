@@ -4,7 +4,6 @@ import (
 	"io"
 	"math/rand"
 	"net"
-	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -33,7 +32,7 @@ func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
 
 func (t *TCPProxy) Start() error {
 	logger.Info("starting proxy...")
-	swapped := atomic.CompareAndSwapUint32(&t.state, NEW, STARTING)
+	swapped := AtomicCompareAndSwap(&t.state, NEW, STARTING)
 	if !swapped {
 		return errors.New("attempted to start proxy when not in NEW state")
 	}
@@ -47,7 +46,7 @@ func (t *TCPProxy) Start() error {
 
 	logger.Info("listening on ", t.ln.Addr())
 
-	swapped = atomic.CompareAndSwapUint32(&t.state, STARTING, RUNNING)
+	swapped = AtomicCompareAndSwap(&t.state, STARTING, RUNNING)
 	if !swapped {
 		t.Shutdown()
 		return errors.New("attempted to run proxy when not in STARTING state")
@@ -58,8 +57,8 @@ func (t *TCPProxy) Start() error {
 }
 
 func (t *TCPProxy) Shutdown() {
-	prev := atomic.SwapUint32(&t.state, STOPPED)
-	logger.Infof("shutting down in state %s", ProxyStateString(prev))
+	prev := AtomicSwap(&t.state, STOPPED)
+	logger.Infof("shutting down in state %s", prev.String())
 	switch prev {
 	case NEW, STARTING:
 		close(t.shutdownc)
