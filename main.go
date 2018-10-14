@@ -4,12 +4,24 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
 func main() {
 	cfg := cli()
 	tcpProxy := NewTCPProxy(*cfg)
+
+	signalc := make(chan os.Signal)
+	signal.Notify(signalc, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		for range signalc {
+			fmt.Println()
+			tcpProxy.Shutdown()
+		}
+	}()
+
 	err := tcpProxy.Run()
 	if err != nil {
 		logger.Error(err)
