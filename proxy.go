@@ -19,14 +19,20 @@ type TCPProxy struct {
 	state     ProxyState
 	shutdownc chan struct{}
 	exitc     chan error
+	services []Service
 }
 
 func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
+	services := make([]Service, len(cfg.services))
+	for i, s := range cfg.services {
+		services[i] = Service{s, HEALTHY}
+	}
 	return &TCPProxy{
 		cfg:       cfg,
 		state:     NEW,
 		shutdownc: make(chan struct{}),
 		exitc:     make(chan error, 1),
+		services:  services,
 	}
 }
 
@@ -122,9 +128,9 @@ func (t *TCPProxy) acceptConns() {
 func (t *TCPProxy) handleConn(src net.Conn) {
 	defer src.Close()
 
-	service := t.cfg.services[rand.Intn(len(t.cfg.services))]
+	service := t.services[rand.Intn(len(t.services))]
 
-	dst, err := net.DialTimeout("tcp", service, t.cfg.timeout)
+	dst, err := net.DialTimeout("tcp", service.Addr(), t.cfg.timeout)
 	if err != nil {
 		// TODO: attempt a different backend.
 		logger.Error(errors.Wrapf(err, "error dialing service %s", service))
