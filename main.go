@@ -13,6 +13,7 @@ func main() {
 	err := tcpProxy.Run()
 	if err != nil {
 		logger.Error(err)
+		os.Exit(1)
 	}
 }
 

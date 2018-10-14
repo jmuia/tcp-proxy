@@ -3,7 +3,8 @@ package main
 type ProxyState = uint32
 
 const (
-	READY   ProxyState = 1
-	RUNNING ProxyState = 2
-	STOPPED ProxyState = 3
+	NEW      ProxyState = 1
+	STARTING ProxyState = 2
+	RUNNING  ProxyState = 3
+	STOPPED  ProxyState = 4
 )

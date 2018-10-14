@@ -25,7 +25,7 @@ type TCPProxy struct {
 func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
 	return &TCPProxy{
 		cfg:       cfg,
-		state:     READY,
+		state:     NEW,
 		shutdownc: make(chan struct{}),
 		exitc:     make(chan error, 1),
 	}
@@ -33,18 +33,23 @@ func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
 
 func (t *TCPProxy) Start() error {
 	logger.Info("starting proxy...")
+	swapped := atomic.CompareAndSwapUint32(&t.state, NEW, STARTING)
+	if !swapped {
+		return errors.New("attempted to start proxy when not in NEW state")
+	}
 
 	var err error
 	t.ln, err = net.Listen("tcp", t.cfg.laddr)
 	if err != nil {
+		t.Shutdown()
 		return errors.Wrapf(err, "failed to listen on %s", t.cfg.laddr)
 	}
 	logger.Info("listening on ", t.ln.Addr())
 
-	swapped := atomic.CompareAndSwapUint32(&t.state, READY, RUNNING)
+	swapped = atomic.CompareAndSwapUint32(&t.state, STARTING, RUNNING)
 	if !swapped {
-		t.ln.Close()
-		return errors.New("attempted to start proxy when not in READY state")
+		t.Shutdown()
+		return errors.New("attempted to run proxy when not in STARTING state")
 	}
 
 	go t.acceptConns()
@@ -54,7 +59,11 @@ func (t *TCPProxy) Start() error {
 func (t *TCPProxy) Shutdown() {
 	logger.Info("shutting down...")
 	prev := atomic.SwapUint32(&t.state, STOPPED)
-	if prev != STOPPED {
+	switch prev {
+	case NEW, STARTING:
+		close(t.shutdownc)
+		t.exit()
+	case RUNNING:
 		close(t.shutdownc)
 	}
 }
@@ -67,10 +76,17 @@ func (t *TCPProxy) Run() error {
 	return <-t.exitc
 }
 
-func (t *TCPProxy) acceptConns() {
-	defer t.ln.Close()
-	defer close(t.exitc)
+func (t *TCPProxy) exit() {
+	if t.ln != nil {
+		t.ln.Close()
+	}
+	close(t.exitc)
+}
 
+func (t *TCPProxy) acceptConns() {
+	defer t.exit()
+
+	// TODO: use a worker pool to limit concurrency.
 	for {
 		select {
 		case <-t.shutdownc:
@@ -78,8 +94,8 @@ func (t *TCPProxy) acceptConns() {
 		default:
 			src, err := t.ln.Accept()
 			if err != nil {
-				t.Shutdown()
 				t.exitc <- err
+				t.Shutdown()
 				return
 			}
 			logger.Info("accepted connection from ", src.RemoteAddr())
