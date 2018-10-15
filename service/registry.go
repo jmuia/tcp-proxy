@@ -28,7 +28,9 @@ func NewRegistry(cfg health.HealthCheckConfig) *Registry {
 		for s := range r.aggr {
 			r.lock.RLock()
 			for _, l := range r.listeners {
-				go func() { l(*s) }()
+				go func(s *Service, l UpdateListener) {
+					l(*s)
+				}(s, l)
 			}
 			r.lock.RUnlock()
 		}

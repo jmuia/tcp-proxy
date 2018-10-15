@@ -71,7 +71,9 @@ func (hm *HealthMonitor) Monitor() error {
 		for range ticker.C {
 			hm.lock.RLock()
 			for _, check := range hm.checks {
-				go func() { errc <- check.Check() }()
+				go func(hc health.HealthCheck) {
+					errc <- hc.Check()
+				}(check)
 			}
 			hm.lock.RUnlock()
 		}
@@ -112,7 +114,7 @@ func (hm *HealthMonitor) applyHealthCheck(err error) {
 		if hm.unhealthyStreak >= hm.cfg.UnhealthyThreshold {
 			updated := hm.service.SetState(UNHEALTHY)
 			if updated {
-				hm.notifyUpdateListeners(hm.service)
+				hm.updateListeners(hm.service)
 			}
 		}
 	} else {
@@ -121,16 +123,16 @@ func (hm *HealthMonitor) applyHealthCheck(err error) {
 		if hm.healthyStreak >= hm.cfg.HealthyThreshold {
 			updated := hm.service.SetState(HEALTHY)
 			if updated {
-				hm.notifyUpdateListeners(hm.service)
+				hm.updateListeners(hm.service)
 			}
 		}
 	}
 }
 
-func (hm *HealthMonitor) notifyUpdateListeners(s *Service) {
+func (hm *HealthMonitor) updateListeners(s *Service) {
 	hm.lock.RLock()
 	for _, l := range hm.listeners {
-		go func() { l(*s) }()
+		go func(l UpdateListener) { l(*s) }(l)
 	}
 	hm.lock.RUnlock()
 }
