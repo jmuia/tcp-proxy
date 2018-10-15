@@ -1,13 +1,11 @@
-package main
+package health
 
 import (
 	"net"
 	"time"
-)
 
-type HealthCheck interface {
-	Check() error
-}
+	logger "github.com/jmuia/tcp-proxy/logging"
+)
 
 type TCPHealthCheck struct {
 	addr    string

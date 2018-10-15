@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"io"
@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	logger "github.com/jmuia/tcp-proxy/logging"
+	"github.com/jmuia/tcp-proxy/service"
 	"github.com/pkg/errors"
 )
 
@@ -17,7 +19,7 @@ type TCPProxy struct {
 	cfg       ProxyConfig
 	ln        net.Listener
 	state     ProxyState
-	registry  *ServiceRegistry
+	registry  *service.ServiceRegistry
 	shutdownc chan struct{}
 	exitc     chan error
 }
@@ -39,20 +41,20 @@ func (t *TCPProxy) Start() error {
 	}
 
 	var err error
-	t.ln, err = net.Listen("tcp", t.cfg.laddr)
+	t.ln, err = net.Listen("tcp", t.cfg.Laddr)
 	if err != nil {
 		t.Shutdown()
-		return errors.Wrapf(err, "failed to listen on %s", t.cfg.laddr)
+		return errors.Wrapf(err, "failed to listen on %s", t.cfg.Laddr)
 	}
 
 	logger.Info("listening on ", t.ln.Addr())
 
 	// TODO: update load balancing based upon health checks.
-	t.registry = NewServiceRegistry(t.cfg.health)
-	t.registry.RegisterUpdateListener(func(service Service) {
+	t.registry = service.NewServiceRegistry(t.cfg.Health)
+	t.registry.RegisterUpdateListener(func(service service.Service) {
 		logger.Infof("%s now %s", service.Addr(), service.State().String())
 	})
-	for _, s := range t.cfg.services {
+	for _, s := range t.cfg.Services {
 		err := t.registry.Add(s)
 		if err != nil {
 			t.Shutdown()
@@ -140,7 +142,7 @@ func (t *TCPProxy) handleConn(src net.Conn) {
 	services := t.registry.Snapshot()
 	service := services[rand.Intn(len(services))]
 
-	dst, err := net.DialTimeout("tcp", service.Addr(), t.cfg.timeout)
+	dst, err := net.DialTimeout("tcp", service.Addr(), t.cfg.Timeout)
 	if err != nil {
 		// TODO: attempt a different backend.
 		logger.Error(errors.Wrapf(err, "error dialing service %v", service))

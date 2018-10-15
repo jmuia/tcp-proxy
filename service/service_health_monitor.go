@@ -1,19 +1,13 @@
-package main
+package service
 
 import (
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/jmuia/tcp-proxy/health"
 	"github.com/pkg/errors"
 )
-
-type HealthCheckConfig struct {
-	timeout            time.Duration
-	interval           time.Duration
-	unhealthyThreshold int
-	healthyThreshold   int
-}
 
 type ServiceHealthMonitorState = uint32
 
@@ -26,9 +20,9 @@ const (
 
 type ServiceHealthMonitor struct {
 	lock            sync.RWMutex
-	cfg             HealthCheckConfig
+	cfg             health.HealthCheckConfig
 	service         *Service
-	checks          []HealthCheck
+	checks          []health.HealthCheck
 	stopc           chan struct{}
 	unhealthyStreak int
 	healthyStreak   int
@@ -36,12 +30,12 @@ type ServiceHealthMonitor struct {
 	state           ServiceHealthMonitorState
 }
 
-func NewServiceHealthMonitor(service *Service, cfg HealthCheckConfig) *ServiceHealthMonitor {
+func NewServiceHealthMonitor(service *Service, cfg health.HealthCheckConfig) *ServiceHealthMonitor {
 	return &ServiceHealthMonitor{
 		lock:            sync.RWMutex{},
 		cfg:             cfg,
 		service:         service,
-		checks:          make([]HealthCheck, 0),
+		checks:          make([]health.HealthCheck, 0),
 		stopc:           make(chan struct{}, 1),
 		unhealthyStreak: 0,
 		healthyStreak:   0,
@@ -50,7 +44,7 @@ func NewServiceHealthMonitor(service *Service, cfg HealthCheckConfig) *ServiceHe
 	}
 }
 
-func (shm *ServiceHealthMonitor) AddHealthCheck(hc HealthCheck) {
+func (shm *ServiceHealthMonitor) AddHealthCheck(hc health.HealthCheck) {
 	shm.lock.Lock()
 	defer shm.lock.Unlock()
 	shm.checks = append(shm.checks, hc)
@@ -69,7 +63,7 @@ func (shm *ServiceHealthMonitor) Monitor() error {
 	}
 
 	errc := make(chan error)
-	ticker := time.NewTicker(shm.cfg.interval)
+	ticker := time.NewTicker(shm.cfg.Interval)
 
 	// Health checks run in an independent goroutine
 	// to ensure a consistent interval.
@@ -115,8 +109,8 @@ func (shm *ServiceHealthMonitor) Stop() {
 func (shm *ServiceHealthMonitor) applyHealthCheck(err error) {
 	if err != nil {
 		shm.healthyStreak = 0
-		shm.unhealthyStreak = min(shm.unhealthyStreak+1, shm.cfg.unhealthyThreshold)
-		if shm.unhealthyStreak >= shm.cfg.unhealthyThreshold {
+		shm.unhealthyStreak = min(shm.unhealthyStreak+1, shm.cfg.UnhealthyThreshold)
+		if shm.unhealthyStreak >= shm.cfg.UnhealthyThreshold {
 			updated := shm.service.SetState(UNHEALTHY)
 			if updated {
 				shm.notifyUpdateListeners(shm.service)
@@ -124,8 +118,8 @@ func (shm *ServiceHealthMonitor) applyHealthCheck(err error) {
 		}
 	} else {
 		shm.unhealthyStreak = 0
-		shm.healthyStreak = min(shm.healthyStreak+1, shm.cfg.healthyThreshold)
-		if shm.healthyStreak >= shm.cfg.healthyThreshold {
+		shm.healthyStreak = min(shm.healthyStreak+1, shm.cfg.HealthyThreshold)
+		if shm.healthyStreak >= shm.cfg.HealthyThreshold {
 			updated := shm.service.SetState(HEALTHY)
 			if updated {
 				shm.notifyUpdateListeners(shm.service)

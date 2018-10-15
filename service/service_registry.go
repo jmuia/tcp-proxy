@@ -1,21 +1,23 @@
-package main
+package service
 
 import (
 	"sync"
+
+	"github.com/jmuia/tcp-proxy/health"
 )
 
 type ServiceUpdateListener func(service Service)
 
 type ServiceRegistry struct {
 	lock      sync.RWMutex
-	cfg       HealthCheckConfig
+	cfg       health.HealthCheckConfig
 	services  map[string]*Service
 	monitors  map[string]*ServiceHealthMonitor
 	listeners []ServiceUpdateListener
 	aggr      chan *Service
 }
 
-func NewServiceRegistry(cfg HealthCheckConfig) *ServiceRegistry {
+func NewServiceRegistry(cfg health.HealthCheckConfig) *ServiceRegistry {
 	sr := &ServiceRegistry{
 		lock:      sync.RWMutex{},
 		cfg:       cfg,
@@ -44,7 +46,7 @@ func (sr *ServiceRegistry) Add(addr string) error {
 	// TODO: perform an initial health check rather than assuming healthy.
 	sr.services[addr] = &Service{addr, HEALTHY}
 	sr.monitors[addr] = NewServiceHealthMonitor(sr.services[addr], sr.cfg)
-	sr.monitors[addr].AddHealthCheck(NewTCPHealthCheck(addr, sr.cfg.timeout))
+	sr.monitors[addr].AddHealthCheck(health.NewTCPHealthCheck(addr, sr.cfg.Timeout))
 	sr.monitors[addr].RegisterUpdateListener(func(s Service) {
 		sr.aggr <- &s
 	})

@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jmuia/tcp-proxy/health"
 	"github.com/pkg/errors"
 )
 
@@ -38,14 +39,14 @@ func TestProxy(t *testing.T) {
 
 	// Set up proxy.
 	proxyConfig := ProxyConfig{
-		laddr:    "localhost:0",
-		timeout:  1 * time.Second,
-		services: []string{serviceListener.Addr().String()},
-		health: HealthCheckConfig{
-			timeout:            1 * time.Second,
-			interval:           5 * time.Second,
-			unhealthyThreshold: 3,
-			healthyThreshold:   3,
+		Laddr:    "localhost:0",
+		Timeout:  1 * time.Second,
+		Services: []string{serviceListener.Addr().String()},
+		Health: health.HealthCheckConfig{
+			Timeout:            1 * time.Second,
+			Interval:           5 * time.Second,
+			UnhealthyThreshold: 3,
+			HealthyThreshold:   3,
 		},
 	}
 	tcpProxy := NewTCPProxy(proxyConfig)
