@@ -38,7 +38,7 @@ func TestProxy(t *testing.T) {
 	defer serviceListener.Close()
 
 	// Set up proxy.
-	proxyConfig := ProxyConfig{
+	proxyConfig := Config{
 		Laddr:    "localhost:0",
 		Timeout:  1 * time.Second,
 		Services: []string{serviceListener.Addr().String()},

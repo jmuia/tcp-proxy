@@ -33,8 +33,8 @@ func main() {
 	}
 }
 
-func cli() *proxy.ProxyConfig {
-	cfg := proxy.ProxyConfig{}
+func cli() *proxy.Config {
+	cfg := proxy.Config{}
 
 	flag.Usage = func() {
 		fmt.Println("Usage: ./tcp-proxy [OPTIONS] <SERVICE>...")

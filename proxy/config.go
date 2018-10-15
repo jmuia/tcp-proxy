@@ -6,7 +6,7 @@ import (
 	"github.com/jmuia/tcp-proxy/health"
 )
 
-type ProxyConfig struct {
+type Config struct {
 	Laddr    string
 	Timeout  time.Duration
 	Services []string

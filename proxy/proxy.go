@@ -16,15 +16,15 @@ func init() {
 }
 
 type TCPProxy struct {
-	cfg       ProxyConfig
+	cfg       Config
 	ln        net.Listener
-	state     ProxyState
-	registry  *service.ServiceRegistry
+	state     State
+	registry  *service.Registry
 	shutdownc chan struct{}
 	exitc     chan error
 }
 
-func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
+func NewTCPProxy(cfg Config) *TCPProxy {
 	return &TCPProxy{
 		cfg:       cfg,
 		state:     NEW,
@@ -50,7 +50,7 @@ func (t *TCPProxy) Start() error {
 	logger.Info("listening on ", t.ln.Addr())
 
 	// TODO: update load balancing based upon health checks.
-	t.registry = service.NewServiceRegistry(t.cfg.Health)
+	t.registry = service.NewRegistry(t.cfg.Health)
 	t.registry.RegisterUpdateListener(func(service service.Service) {
 		logger.Infof("%s now %s", service.Addr(), service.State().String())
 	})
