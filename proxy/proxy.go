@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/jmuia/tcp-proxy/loadbalancer"
 	logger "github.com/jmuia/tcp-proxy/logging"
 	"github.com/jmuia/tcp-proxy/service"
 	"github.com/pkg/errors"
@@ -19,6 +20,7 @@ type TCPProxy struct {
 	cfg       Config
 	ln        net.Listener
 	state     State
+	lb        loadbalancer.LoadBalancer
 	registry  *service.Registry
 	shutdownc chan struct{}
 	exitc     chan error
@@ -49,10 +51,14 @@ func (t *TCPProxy) Start() error {
 
 	logger.Info("listening on ", t.ln.Addr())
 
-	// TODO: update load balancing based upon health checks.
+	t.lb = loadbalancer.NewRandom()
+
 	t.registry = service.NewRegistry(t.cfg.Health)
 	t.registry.RegisterUpdateListener(func(service service.Service) {
 		logger.Infof("%s now %s", service.Addr(), service.State().String())
+	})
+	t.registry.RegisterUpdateListener(func(service service.Service) {
+		t.lb.UpdateService(service)
 	})
 	for _, s := range t.cfg.Services {
 		err := t.registry.Add(s)
@@ -139,8 +145,7 @@ func (t *TCPProxy) acceptConns() {
 func (t *TCPProxy) handleConn(src net.Conn) {
 	defer src.Close()
 
-	services := t.registry.Snapshot()
-	service := services[rand.Intn(len(services))]
+	service := t.lb.NextService(src)
 
 	dst, err := net.DialTimeout("tcp", service.Addr(), t.cfg.Timeout)
 	if err != nil {
