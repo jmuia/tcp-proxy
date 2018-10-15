@@ -11,6 +11,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// TODO: lifecycle tests
+// - cannot start twice
+// - can shutdown idempotently
+// - error on Accept shutsdown
+// - shutdown without any running connections works
+
+// - health check tests
+
 func newLocalListener(t *testing.T) net.Listener {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err == nil {
@@ -31,8 +39,14 @@ func TestProxy(t *testing.T) {
 	// Set up proxy.
 	proxyConfig := ProxyConfig{
 		laddr:    "localhost:0",
-		timeout:  5 * time.Second,
+		timeout:  1 * time.Second,
 		services: []string{serviceListener.Addr().String()},
+		health: HealthCheckConfig{
+			timeout:            1 * time.Second,
+			interval:           5 * time.Second,
+			unhealthyThreshold: 3,
+			healthyThreshold:   3,
+		},
 	}
 	tcpProxy := NewTCPProxy(proxyConfig)
 	err := tcpProxy.Start()

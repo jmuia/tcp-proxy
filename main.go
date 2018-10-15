@@ -57,5 +57,12 @@ func cli() *ProxyConfig {
 
 	cfg.services = flag.Args()
 
+	cfg.health = HealthCheckConfig{
+		timeout:            1 * time.Second,
+		interval:           5 * time.Second,
+		unhealthyThreshold: 3,
+		healthyThreshold:   3,
+	}
+
 	return &cfg
 }

@@ -17,22 +17,17 @@ type TCPProxy struct {
 	cfg       ProxyConfig
 	ln        net.Listener
 	state     ProxyState
+	registry  *ServiceRegistry
 	shutdownc chan struct{}
 	exitc     chan error
-	services  []Service
 }
 
 func NewTCPProxy(cfg ProxyConfig) *TCPProxy {
-	services := make([]Service, len(cfg.services))
-	for i, s := range cfg.services {
-		services[i] = Service{s, HEALTHY}
-	}
 	return &TCPProxy{
 		cfg:       cfg,
 		state:     NEW,
 		shutdownc: make(chan struct{}),
 		exitc:     make(chan error, 1),
-		services:  services,
 	}
 }
 
@@ -53,25 +48,17 @@ func (t *TCPProxy) Start() error {
 	logger.Info("listening on ", t.ln.Addr())
 
 	// TODO: update load balancing based upon health checks.
-	// and actually kill this stuff on shutdown.
-	go func() {
-		hcs := make([]*TCPHealthCheck, len(t.services))
-		for i, s := range t.services {
-			hcs[i] = NewTCPHealthCheck(s.Addr(), 1*time.Second)
+	t.registry = NewServiceRegistry(t.cfg.health)
+	t.registry.RegisterUpdateListener(func(service Service) {
+		logger.Infof("%s now %s", service.Addr(), service.State().String())
+	})
+	for _, s := range t.cfg.services {
+		err := t.registry.Add(s)
+		if err != nil {
+			t.Shutdown()
+			return errors.Wrapf(err, "failed to register %s", s)
 		}
-		for range time.NewTicker(5 * time.Second).C {
-			for _, hc := range hcs {
-				go func() {
-					err := hc.Check()
-					if err != nil {
-						logger.Infof("%s failed health check: %s", hc.Addr(), err)
-					} else {
-						logger.Infof("%s passed health check", hc.Addr())
-					}
-				}()
-			}
-		}
-	}()
+	}
 
 	swapped = AtomicCompareAndSwap(&t.state, STARTING, RUNNING)
 	if !swapped {
@@ -107,6 +94,7 @@ func (t *TCPProxy) exit() {
 	if t.ln != nil {
 		t.ln.Close()
 	}
+	t.registry.EvictAll()
 	close(t.exitc)
 }
 
@@ -149,12 +137,13 @@ func (t *TCPProxy) acceptConns() {
 func (t *TCPProxy) handleConn(src net.Conn) {
 	defer src.Close()
 
-	service := t.services[rand.Intn(len(t.services))]
+	services := t.registry.Snapshot()
+	service := services[rand.Intn(len(services))]
 
 	dst, err := net.DialTimeout("tcp", service.Addr(), t.cfg.timeout)
 	if err != nil {
 		// TODO: attempt a different backend.
-		logger.Error(errors.Wrapf(err, "error dialing service %s", service))
+		logger.Error(errors.Wrapf(err, "error dialing service %v", service))
 		return
 	}
 	defer dst.Close()

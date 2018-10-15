@@ -34,6 +34,7 @@ func (s *Service) State() ServiceState {
 	return (ServiceState)(atomic.LoadUint32((*uint32)(&s.state)))
 }
 
-func (s *Service) SetState(state ServiceState) {
-	atomic.StoreUint32((*uint32)(&s.state), (uint32)(state))
+func (s *Service) SetState(state ServiceState) (updated bool) {
+	prev := (ServiceState)(atomic.SwapUint32((*uint32)(&s.state), (uint32)(state)))
+	return prev != state
 }
