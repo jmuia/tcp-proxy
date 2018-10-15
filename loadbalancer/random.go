@@ -23,7 +23,7 @@ func NewRandom() *Random {
 	}
 }
 
-func (lb *Random) UpdateService(s service.Service) {
+func (lb *Random) UpdateService(s *service.Service) {
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
 
@@ -39,16 +39,16 @@ func (lb *Random) UpdateService(s service.Service) {
 	case service.HEALTHY:
 		if !exists {
 			logger.Infof("loadbalancer: Added %s as %s", s.Addr(), s.State().String())
-			lb.srvlist = append(lb.srvlist, &s)
+			lb.srvlist = append(lb.srvlist, s)
 			lb.srvmap[s.Addr()] = len(lb.srvlist) - 1
 		}
 	}
 }
 
-func (lb *Random) NextService(c net.Conn) service.Service {
+func (lb *Random) NextService(c net.Conn) *service.Service {
 	lb.lock.RLock()
 	defer lb.lock.RUnlock()
-	return *lb.srvlist[rand.Intn(len(lb.srvlist))]
+	return lb.srvlist[rand.Intn(len(lb.srvlist))]
 }
 
 func (lb *Random) remove(index int) {

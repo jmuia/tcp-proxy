@@ -1,3 +1,3 @@
 package service
 
-type UpdateListener func(service Service)
+type UpdateListener func(service *Service)

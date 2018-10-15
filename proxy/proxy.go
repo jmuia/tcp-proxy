@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"io"
 	"math/rand"
 	"net"
@@ -26,17 +27,29 @@ type TCPProxy struct {
 	exitc     chan error
 }
 
-func NewTCPProxy(cfg Config) *TCPProxy {
+func NewTCPProxy(cfg Config) (*TCPProxy, error) {
+	var lb loadbalancer.LoadBalancer
+	switch cfg.Lb.Type {
+	case loadbalancer.RANDOM_TYPE:
+		lb = loadbalancer.NewRandom()
+	case loadbalancer.P2C_TYPE:
+		lb = loadbalancer.NewP2C()
+	default:
+		return nil, errors.New(fmt.Sprintf("unexpected load balancer type %s", cfg.Lb.Type))
+	}
+
 	return &TCPProxy{
 		cfg:       cfg,
 		state:     NEW,
+		lb:        lb,
 		shutdownc: make(chan struct{}),
 		exitc:     make(chan error, 1),
-	}
+	}, nil
 }
 
 func (t *TCPProxy) Start() error {
 	logger.Info("starting proxy...")
+	logger.Infof("config: %+v", t.cfg)
 	swapped := AtomicCompareAndSwap(&t.state, NEW, STARTING)
 	if !swapped {
 		return errors.New("attempted to start proxy when not in NEW state")
@@ -51,13 +64,11 @@ func (t *TCPProxy) Start() error {
 
 	logger.Info("listening on ", t.ln.Addr())
 
-	t.lb = loadbalancer.NewRandom()
-
 	t.registry = service.NewRegistry(t.cfg.Health)
-	t.registry.RegisterUpdateListener(func(service service.Service) {
+	t.registry.RegisterUpdateListener(func(service *service.Service) {
 		logger.Infof("%s now %s", service.Addr(), service.State().String())
 	})
-	t.registry.RegisterUpdateListener(func(service service.Service) {
+	t.registry.RegisterUpdateListener(func(service *service.Service) {
 		t.lb.UpdateService(service)
 	})
 	for _, s := range t.cfg.Services {
@@ -119,6 +130,8 @@ func (t *TCPProxy) acceptConns() {
 	defer t.exit()
 
 	// TODO: use a worker pool to limit concurrency.
+	// TODO: don't accept connections if there aren't any
+	//       healthy services to proxy to.
 	for {
 		select {
 		case <-t.shutdownc:
@@ -154,7 +167,11 @@ func (t *TCPProxy) handleConn(src net.Conn) {
 		return
 	}
 	defer dst.Close()
-	logger.Info("opened connection to ", dst.RemoteAddr())
+
+	activeConns := service.IncrActiveConns()
+	defer service.DecrActiveConns()
+
+	logger.Infof("opened connection to %s (%d active)", dst.RemoteAddr(), activeConns)
 
 	t.proxyConn(src, dst)
 }

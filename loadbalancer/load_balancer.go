@@ -7,6 +7,6 @@ import (
 )
 
 type LoadBalancer interface {
-	NextService(c net.Conn) service.Service
-	UpdateService(s service.Service)
+	NextService(c net.Conn) *service.Service
+	UpdateService(s *service.Service)
 }

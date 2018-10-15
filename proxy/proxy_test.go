@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jmuia/tcp-proxy/health"
+	"github.com/jmuia/tcp-proxy/loadbalancer"
 	"github.com/pkg/errors"
 )
 
@@ -48,9 +49,15 @@ func TestProxy(t *testing.T) {
 			UnhealthyThreshold: 3,
 			HealthyThreshold:   3,
 		},
+		Lb: loadbalancer.Config{loadbalancer.P2C_TYPE},
 	}
-	tcpProxy := NewTCPProxy(proxyConfig)
-	err := tcpProxy.Start()
+
+	tcpProxy, err := NewTCPProxy(proxyConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = tcpProxy.Start()
 	if err != nil {
 		t.Fatal(err)
 	}

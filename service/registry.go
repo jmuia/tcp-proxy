@@ -29,7 +29,7 @@ func NewRegistry(cfg health.HealthCheckConfig) *Registry {
 			r.lock.RLock()
 			for _, l := range r.listeners {
 				go func(s *Service, l UpdateListener) {
-					l(*s)
+					l(s)
 				}(s, l)
 			}
 			r.lock.RUnlock()
@@ -44,11 +44,11 @@ func (r *Registry) Add(addr string) error {
 	r.remove(addr)
 
 	// TODO: perform an initial health check rather than assuming healthy.
-	r.services[addr] = &Service{addr, HEALTHY}
+	r.services[addr] = &Service{addr, HEALTHY, 0}
 	r.monitors[addr] = NewHealthMonitor(r.services[addr], r.cfg)
 	r.monitors[addr].AddHealthCheck(health.NewTCPHealthCheck(addr, r.cfg.Timeout))
-	r.monitors[addr].RegisterUpdateListener(func(s Service) {
-		r.aggr <- &s
+	r.monitors[addr].RegisterUpdateListener(func(s *Service) {
+		r.aggr <- s
 	})
 	err := r.monitors[addr].Monitor()
 	if err != nil {

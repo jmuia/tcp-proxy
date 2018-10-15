@@ -132,7 +132,7 @@ func (hm *HealthMonitor) applyHealthCheck(err error) {
 func (hm *HealthMonitor) updateListeners(s *Service) {
 	hm.lock.RLock()
 	for _, l := range hm.listeners {
-		go func(l UpdateListener) { l(*s) }(l)
+		go func(l UpdateListener) { l(s) }(l)
 	}
 	hm.lock.RUnlock()
 }
