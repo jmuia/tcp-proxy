@@ -9,7 +9,7 @@ import (
 
 	"github.com/jmuia/tcp-proxy/loadbalancer"
 	logger "github.com/jmuia/tcp-proxy/logging"
-	"github.com/jmuia/tcp-proxy/service"
+	"github.com/jmuia/tcp-proxy/backend"
 	"github.com/pkg/errors"
 )
 
@@ -22,7 +22,7 @@ type TCPProxy struct {
 	ln        net.Listener
 	state     State
 	lb        loadbalancer.LoadBalancer
-	registry  *service.Registry
+	registry  *backend.Registry
 	shutdownc chan struct{}
 	exitc     chan error
 }
@@ -64,18 +64,18 @@ func (t *TCPProxy) Start() error {
 
 	logger.Info("listening on ", t.ln.Addr())
 
-	t.registry = service.NewRegistry(t.cfg.Health)
-	t.registry.RegisterUpdateListener(func(service *service.Service) {
-		logger.Infof("%s now %s", service.Addr(), service.State().String())
+	t.registry = backend.NewRegistry(t.cfg.Health)
+	t.registry.RegisterUpdateListener(func(backend *backend.Backend) {
+		logger.Infof("%s now %s", backend.Addr(), backend.State().String())
 	})
-	t.registry.RegisterUpdateListener(func(service *service.Service) {
-		t.lb.UpdateService(service)
+	t.registry.RegisterUpdateListener(func(backend *backend.Backend) {
+		t.lb.UpdateBackend(backend)
 	})
-	for _, s := range t.cfg.Services {
-		err := t.registry.Add(s)
+	for _, b := range t.cfg.Backends {
+		err := t.registry.Add(b)
 		if err != nil {
 			t.Shutdown()
-			return errors.Wrapf(err, "failed to register %s", s)
+			return errors.Wrapf(err, "failed to register %s", b)
 		}
 	}
 
@@ -131,7 +131,7 @@ func (t *TCPProxy) acceptConns() {
 
 	// TODO: use a worker pool to limit concurrency.
 	// TODO: don't accept connections if there aren't any
-	//       healthy services to proxy to.
+	//       healthy backends to proxy to.
 	for {
 		select {
 		case <-t.shutdownc:
@@ -158,18 +158,18 @@ func (t *TCPProxy) acceptConns() {
 func (t *TCPProxy) handleConn(src net.Conn) {
 	defer src.Close()
 
-	service := t.lb.NextService(src)
+	backend := t.lb.NextBackend(src)
 
-	dst, err := net.DialTimeout("tcp", service.Addr(), t.cfg.Timeout)
+	dst, err := net.DialTimeout("tcp", backend.Addr(), t.cfg.Timeout)
 	if err != nil {
 		// TODO: attempt a different backend.
-		logger.Error(errors.Wrapf(err, "error dialing service %v", service))
+		logger.Error(errors.Wrapf(err, "error dialing backend %v", backend))
 		return
 	}
 	defer dst.Close()
 
-	activeConns := service.IncrActiveConns()
-	defer service.DecrActiveConns()
+	activeConns := backend.IncrActiveConns()
+	defer backend.DecrActiveConns()
 
 	logger.Infof("opened connection to %s (%d active)", dst.RemoteAddr(), activeConns)
 

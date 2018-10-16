@@ -34,15 +34,15 @@ func newLocalListener(t *testing.T) net.Listener {
 }
 
 func TestProxy(t *testing.T) {
-	// Set up a service to proxy to.
-	serviceListener := newLocalListener(t)
-	defer serviceListener.Close()
+	// Set up a backend to proxy to.
+	backendListener := newLocalListener(t)
+	defer backendListener.Close()
 
 	// Set up proxy.
 	proxyConfig := Config{
 		Laddr:    "localhost:0",
 		Timeout:  1 * time.Second,
-		Services: []string{serviceListener.Addr().String()},
+		Backends: []string{backendListener.Addr().String()},
 		Health: health.HealthCheckConfig{
 			Timeout:            1 * time.Second,
 			Interval:           5 * time.Second,
@@ -70,12 +70,12 @@ func TestProxy(t *testing.T) {
 	}
 	defer client.Close()
 
-	// Accept the connection from the proxy to the service.
-	service, err := serviceListener.Accept()
+	// Accept the connection from the proxy to the backend.
+	backend, err := backendListener.Accept()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer service.Close()
+	defer backend.Close()
 
 	// Concurrently send messages back and forth,
 	// tracking the first error that occurs.
@@ -96,8 +96,8 @@ func TestProxy(t *testing.T) {
 	}
 
 	for i := 0; i < 1000; i++ {
-		go communicateViaProxy(client, service, "hello!")
-		go communicateViaProxy(service, client, "hey!")
+		go communicateViaProxy(client, backend, "hello!")
+		go communicateViaProxy(backend, client, "hey!")
 		wg.Add(2)
 	}
 	wg.Wait()
@@ -106,7 +106,7 @@ func TestProxy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	service.Close()
+	backend.Close()
 	client.Close()
 
 	// Sleep for a couple seconds to allow the proxy to finish up

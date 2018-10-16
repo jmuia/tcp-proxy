@@ -42,7 +42,7 @@ func cli() *proxy.Config {
 	cfg := proxy.Config{}
 
 	flag.Usage = func() {
-		fmt.Println("Usage: ./tcp-proxy [OPTIONS] <SERVICE>...")
+		fmt.Println("Usage: ./tcp-proxy [OPTIONS] <BACKEND>...")
 		flag.PrintDefaults()
 		fmt.Println()
 
@@ -56,7 +56,7 @@ func cli() *proxy.Config {
 	}
 
 	flag.StringVar(&cfg.Laddr, "laddr", ":4000", "address to listen on")
-	flag.DurationVar(&cfg.Timeout, "timeout", 3*time.Second, "service dial timeout")
+	flag.DurationVar(&cfg.Timeout, "timeout", 3*time.Second, "backend dial timeout")
 
 	flag.Var(newLbTypeVar(&cfg.Lb.Type, loadbalancer.P2C_TYPE), "lb", "load balancer algorithm (RANDOM|P2C)")
 
@@ -67,7 +67,7 @@ func cli() *proxy.Config {
 		os.Exit(1)
 	}
 
-	cfg.Services = flag.Args()
+	cfg.Backends = flag.Args()
 
 	cfg.Health = health.HealthCheckConfig{
 		Timeout:            1 * time.Second,

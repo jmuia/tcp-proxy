@@ -1,4 +1,4 @@
-package service
+package backend
 
 import (
 	"sync"
@@ -9,28 +9,28 @@ import (
 type Registry struct {
 	lock      sync.RWMutex
 	cfg       health.HealthCheckConfig
-	services  map[string]*Service
+	backends  map[string]*Backend
 	monitors  map[string]*HealthMonitor
 	listeners []UpdateListener
-	aggr      chan *Service
+	aggr      chan *Backend
 }
 
 func NewRegistry(cfg health.HealthCheckConfig) *Registry {
 	r := &Registry{
 		lock:      sync.RWMutex{},
 		cfg:       cfg,
-		services:  make(map[string]*Service),
+		backends:  make(map[string]*Backend),
 		monitors:  make(map[string]*HealthMonitor),
 		listeners: make([]UpdateListener, 0),
-		aggr:      make(chan *Service),
+		aggr:      make(chan *Backend),
 	}
 	go func() {
-		for s := range r.aggr {
+		for b := range r.aggr {
 			r.lock.RLock()
 			for _, l := range r.listeners {
-				go func(s *Service, l UpdateListener) {
-					l(s)
-				}(s, l)
+				go func(b *Backend, l UpdateListener) {
+					l(b)
+				}(b, l)
 			}
 			r.lock.RUnlock()
 		}
@@ -44,17 +44,17 @@ func (r *Registry) Add(addr string) error {
 	r.remove(addr)
 
 	// TODO: perform an initial health check rather than assuming healthy.
-	r.services[addr] = &Service{addr, HEALTHY, 0}
-	r.monitors[addr] = NewHealthMonitor(r.services[addr], r.cfg)
+	r.backends[addr] = &Backend{addr, HEALTHY, 0}
+	r.monitors[addr] = NewHealthMonitor(r.backends[addr], r.cfg)
 	r.monitors[addr].AddHealthCheck(health.NewTCPHealthCheck(addr, r.cfg.Timeout))
-	r.monitors[addr].RegisterUpdateListener(func(s *Service) {
-		r.aggr <- s
+	r.monitors[addr].RegisterUpdateListener(func(b *Backend) {
+		r.aggr <- b
 	})
 	err := r.monitors[addr].Monitor()
 	if err != nil {
 		r.remove(addr)
 	} else {
-		go func() { r.aggr <- r.services[addr] }()
+		go func() { r.aggr <- r.backends[addr] }()
 	}
 	return err
 }
@@ -71,29 +71,29 @@ func (r *Registry) RegisterUpdateListener(listener UpdateListener) {
 	r.listeners = append(r.listeners, listener)
 }
 
-func (r *Registry) Snapshot() []Service {
+func (r *Registry) Snapshot() []Backend {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
-	services := make([]Service, 0, len(r.services))
-	for _, s := range r.services {
-		services = append(services, *s)
+	backends := make([]Backend, 0, len(r.backends))
+	for _, b := range r.backends {
+		backends = append(backends, *b)
 	}
-	return services
+	return backends
 }
 
 func (r *Registry) EvictAll() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	for addr := range r.services {
+	for addr := range r.backends {
 		r.remove(addr)
 	}
 }
 
 func (r *Registry) remove(addr string) {
-	s, exists := r.services[addr]
+	b, exists := r.backends[addr]
 	if exists {
-		go func() { r.aggr <- s }()
-		delete(r.services, addr)
+		go func() { r.aggr <- b }()
+		delete(r.backends, addr)
 	}
 
 	m, exists := r.monitors[addr]

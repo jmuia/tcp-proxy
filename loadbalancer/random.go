@@ -6,53 +6,53 @@ import (
 	"sync"
 
 	logger "github.com/jmuia/tcp-proxy/logging"
-	"github.com/jmuia/tcp-proxy/service"
+	"github.com/jmuia/tcp-proxy/backend"
 )
 
 type Random struct {
 	lock    sync.RWMutex
-	srvlist []*service.Service
-	srvmap  map[string]int
+	backendList []*backend.Backend
+	backendMap  map[string]int
 }
 
 func NewRandom() *Random {
 	return &Random{
 		lock:    sync.RWMutex{},
-		srvlist: make([]*service.Service, 0),
-		srvmap:  make(map[string]int),
+		backendList: make([]*backend.Backend, 0),
+		backendMap:  make(map[string]int),
 	}
 }
 
-func (lb *Random) UpdateService(s *service.Service) {
+func (lb *Random) UpdateBackend(s *backend.Backend) {
 	lb.lock.Lock()
 	defer lb.lock.Unlock()
 
-	idx, exists := lb.srvmap[s.Addr()]
+	idx, exists := lb.backendMap[s.Addr()]
 
 	switch s.State() {
-	case service.UNHEALTHY:
+	case backend.UNHEALTHY:
 		if exists {
 			logger.Infof("loadbalancer: Removed %s as %s", s.Addr(), s.State().String())
 			lb.remove(idx)
-			delete(lb.srvmap, s.Addr())
+			delete(lb.backendMap, s.Addr())
 		}
-	case service.HEALTHY:
+	case backend.HEALTHY:
 		if !exists {
 			logger.Infof("loadbalancer: Added %s as %s", s.Addr(), s.State().String())
-			lb.srvlist = append(lb.srvlist, s)
-			lb.srvmap[s.Addr()] = len(lb.srvlist) - 1
+			lb.backendList = append(lb.backendList, s)
+			lb.backendMap[s.Addr()] = len(lb.backendList) - 1
 		}
 	}
 }
 
-func (lb *Random) NextService(c net.Conn) *service.Service {
+func (lb *Random) NextBackend(c net.Conn) *backend.Backend {
 	lb.lock.RLock()
 	defer lb.lock.RUnlock()
-	return lb.srvlist[rand.Intn(len(lb.srvlist))]
+	return lb.backendList[rand.Intn(len(lb.backendList))]
 }
 
 func (lb *Random) remove(index int) {
-	lb.srvlist[index] = lb.srvlist[len(lb.srvlist)-1]
-	lb.srvlist[len(lb.srvlist)-1] = nil
-	lb.srvlist = lb.srvlist[:len(lb.srvlist)-1]
+	lb.backendList[index] = lb.backendList[len(lb.backendList)-1]
+	lb.backendList[len(lb.backendList)-1] = nil
+	lb.backendList = lb.backendList[:len(lb.backendList)-1]
 }

@@ -10,7 +10,7 @@ import (
 type Config struct {
 	Laddr    string
 	Timeout  time.Duration
-	Services []string
+	Backends []string
 	Health   health.HealthCheckConfig
 	Lb       loadbalancer.Config
 }

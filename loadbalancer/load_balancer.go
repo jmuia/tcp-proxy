@@ -3,10 +3,10 @@ package loadbalancer
 import (
 	"net"
 
-	"github.com/jmuia/tcp-proxy/service"
+	"github.com/jmuia/tcp-proxy/backend"
 )
 
 type LoadBalancer interface {
-	NextService(c net.Conn) *service.Service
-	UpdateService(s *service.Service)
+	NextBackend(c net.Conn) *backend.Backend
+	UpdateBackend(s *backend.Backend)
 }

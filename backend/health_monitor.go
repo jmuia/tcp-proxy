@@ -1,4 +1,4 @@
-package service
+package backend
 
 import (
 	"sync"
@@ -20,7 +20,7 @@ const (
 type HealthMonitor struct {
 	lock            sync.RWMutex
 	cfg             health.HealthCheckConfig
-	service         *Service
+	backend         *Backend
 	checks          []health.HealthCheck
 	stopc           chan struct{}
 	unhealthyStreak int
@@ -29,11 +29,11 @@ type HealthMonitor struct {
 	state           healthMonitorState
 }
 
-func NewHealthMonitor(service *Service, cfg health.HealthCheckConfig) *HealthMonitor {
+func NewHealthMonitor(backend *Backend, cfg health.HealthCheckConfig) *HealthMonitor {
 	return &HealthMonitor{
 		lock:            sync.RWMutex{},
 		cfg:             cfg,
-		service:         service,
+		backend:         backend,
 		checks:          make([]health.HealthCheck, 0),
 		stopc:           make(chan struct{}, 1),
 		unhealthyStreak: 0,
@@ -112,24 +112,24 @@ func (hm *HealthMonitor) applyHealthCheck(err error) {
 		hm.healthyStreak = 0
 		hm.unhealthyStreak = min(hm.unhealthyStreak+1, hm.cfg.UnhealthyThreshold)
 		if hm.unhealthyStreak >= hm.cfg.UnhealthyThreshold {
-			updated := hm.service.SetState(UNHEALTHY)
+			updated := hm.backend.SetState(UNHEALTHY)
 			if updated {
-				hm.updateListeners(hm.service)
+				hm.updateListeners(hm.backend)
 			}
 		}
 	} else {
 		hm.unhealthyStreak = 0
 		hm.healthyStreak = min(hm.healthyStreak+1, hm.cfg.HealthyThreshold)
 		if hm.healthyStreak >= hm.cfg.HealthyThreshold {
-			updated := hm.service.SetState(HEALTHY)
+			updated := hm.backend.SetState(HEALTHY)
 			if updated {
-				hm.updateListeners(hm.service)
+				hm.updateListeners(hm.backend)
 			}
 		}
 	}
 }
 
-func (hm *HealthMonitor) updateListeners(s *Service) {
+func (hm *HealthMonitor) updateListeners(s *Backend) {
 	hm.lock.RLock()
 	for _, l := range hm.listeners {
 		go func(l UpdateListener) { l(s) }(l)
