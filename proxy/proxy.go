@@ -7,9 +7,9 @@ import (
 	"net"
 	"time"
 
+	"github.com/jmuia/tcp-proxy/backend"
 	"github.com/jmuia/tcp-proxy/loadbalancer"
 	logger "github.com/jmuia/tcp-proxy/logging"
-	"github.com/jmuia/tcp-proxy/backend"
 	"github.com/pkg/errors"
 )
 

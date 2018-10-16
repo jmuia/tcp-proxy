@@ -23,6 +23,7 @@ func (lb *P2C) NextBackend(c net.Conn) *backend.Backend {
 	lb.random.lock.RLock()
 	defer lb.random.lock.RUnlock()
 
+	// TODO: error if no healthy backends.
 	if len(lb.random.backendList) <= 1 {
 		return lb.random.backendList[0]
 	}

@@ -5,19 +5,19 @@ import (
 	"net"
 	"sync"
 
-	logger "github.com/jmuia/tcp-proxy/logging"
 	"github.com/jmuia/tcp-proxy/backend"
+	logger "github.com/jmuia/tcp-proxy/logging"
 )
 
 type Random struct {
-	lock    sync.RWMutex
+	lock        sync.RWMutex
 	backendList []*backend.Backend
 	backendMap  map[string]int
 }
 
 func NewRandom() *Random {
 	return &Random{
-		lock:    sync.RWMutex{},
+		lock:        sync.RWMutex{},
 		backendList: make([]*backend.Backend, 0),
 		backendMap:  make(map[string]int),
 	}
@@ -48,6 +48,7 @@ func (lb *Random) UpdateBackend(s *backend.Backend) {
 func (lb *Random) NextBackend(c net.Conn) *backend.Backend {
 	lb.lock.RLock()
 	defer lb.lock.RUnlock()
+	// TODO: error if no healthy backends.
 	return lb.backendList[rand.Intn(len(lb.backendList))]
 }
 
