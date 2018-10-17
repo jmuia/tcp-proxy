@@ -10,6 +10,7 @@ import (
 
 	"github.com/jmuia/tcp-proxy/health"
 	"github.com/jmuia/tcp-proxy/loadbalancer"
+	proxytesting "github.com/jmuia/tcp-proxy/testing"
 	"github.com/pkg/errors"
 )
 
@@ -21,21 +22,9 @@ import (
 
 // - health check tests
 
-func newLocalListener(t *testing.T) net.Listener {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err == nil {
-		return ln
-	}
-	ln, err = net.Listen("tcp", "[::1]:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ln
-}
-
 func TestProxy(t *testing.T) {
 	// Set up a backend to proxy to.
-	backendListener := newLocalListener(t)
+	backendListener := proxytesting.NewLocalListener(t)
 	defer backendListener.Close()
 
 	// Set up proxy.
