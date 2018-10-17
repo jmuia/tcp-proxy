@@ -49,10 +49,6 @@ func TestHealthFlappingAboveThreshold(t *testing.T) {
 	for i := 0; i < cfg.UnhealthyThreshold; i++ {
 		hcc <- errors.New("health check failed")
 	}
-	state = backend.State()
-	if state != UNHEALTHY {
-		t.Errorf("backend expected to be UNHEALTHY, was %s", state.String())
-	}
 
 	// We get updated about the state change.
 	update := <-updatec
@@ -61,13 +57,15 @@ func TestHealthFlappingAboveThreshold(t *testing.T) {
 		t.Errorf("update expected to indicate UNHEALTHY, was %s", updateState.String())
 	}
 
+	// Assert the backend (non-copied) is also unhealthy.
+	state = backend.State()
+	if state != UNHEALTHY {
+		t.Errorf("backend expected to be UNHEALTHY, was %s", state.String())
+	}
+
 	// Pass health checks to become healthy.
 	for i := 0; i < cfg.UnhealthyThreshold; i++ {
 		hcc <- nil
-	}
-	state = backend.State()
-	if state != HEALTHY {
-		t.Errorf("backend expected to be HEALTHY, was %s", state.String())
 	}
 
 	// We get updated about the state change.
@@ -75,6 +73,12 @@ func TestHealthFlappingAboveThreshold(t *testing.T) {
 	updateState = update.State()
 	if updateState != HEALTHY {
 		t.Errorf("update expected to indicate HEALTHY, was %s", updateState.String())
+	}
+
+	// Assert the backend (non-copied) is also healthy.
+	state = backend.State()
+	if state != HEALTHY {
+		t.Errorf("backend expected to be HEALTHY, was %s", state.String())
 	}
 }
 
