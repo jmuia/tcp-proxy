@@ -18,7 +18,6 @@ import (
 // - cannot start twice
 // - can shutdown idempotently
 // - error on Accept shutsdown
-// - shutdown without any running connections works
 
 // - health check tests
 
@@ -121,4 +120,34 @@ func assertSendAndReceiveMessage(s net.Conn, r net.Conn, msg string) error {
 	}
 
 	return nil
+}
+
+func TestShutdownNoConnections(t *testing.T) {
+	proxyConfig := Config{
+		Laddr:   "localhost:0",
+		Timeout: 1 * time.Second,
+		Lb:      loadbalancer.Config{loadbalancer.P2C_TYPE},
+	}
+
+	tcpProxy, err := NewTCPProxy(proxyConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = tcpProxy.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	donec := make(chan struct{})
+	go func() {
+		tcpProxy.Shutdown()
+		close(donec)
+	}()
+
+	select {
+	case <-donec:
+	case <-time.NewTimer(5 * time.Second).C:
+		t.Error("proxy didn't shutdown in 5s")
+	}
 }
