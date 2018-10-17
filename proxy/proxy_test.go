@@ -15,10 +15,8 @@ import (
 )
 
 // TODO: lifecycle tests
-// - cannot start twice
 // - error on Accept shutsdown
-
-// - health check tests
+// - integration of health checks, registry, load balancing
 
 func TestProxy(t *testing.T) {
 	// Set up a backend to proxy to.
@@ -148,6 +146,30 @@ func TestShutdownNoConnections(t *testing.T) {
 	case <-donec:
 	case <-time.NewTimer(5 * time.Second).C:
 		t.Error("proxy didn't shutdown in 5s")
+	}
+}
+
+func TestCannotStartTwice(t *testing.T) {
+	proxyConfig := Config{
+		Laddr:   "localhost:0",
+		Timeout: 1 * time.Second,
+		Lb:      loadbalancer.Config{loadbalancer.P2C_TYPE},
+	}
+
+	tcpProxy, err := NewTCPProxy(proxyConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = tcpProxy.Start()
+	defer tcpProxy.Shutdown()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = tcpProxy.Start()
+	if err == nil {
+		t.Error("expected proxy to error when attempting to start a second time")
 	}
 }
 
