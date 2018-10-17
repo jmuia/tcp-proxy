@@ -16,7 +16,6 @@ import (
 
 // TODO: lifecycle tests
 // - cannot start twice
-// - can shutdown idempotently
 // - error on Accept shutsdown
 
 // - health check tests
@@ -150,4 +149,27 @@ func TestShutdownNoConnections(t *testing.T) {
 	case <-time.NewTimer(5 * time.Second).C:
 		t.Error("proxy didn't shutdown in 5s")
 	}
+}
+
+func TestIdempotentShutdown(t *testing.T) {
+	proxyConfig := Config{
+		Laddr:   "localhost:0",
+		Timeout: 1 * time.Second,
+		Lb:      loadbalancer.Config{loadbalancer.P2C_TYPE},
+	}
+
+	tcpProxy, err := NewTCPProxy(proxyConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = tcpProxy.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tcpProxy.Shutdown()
+
+	// Calling shutdown a second time is ok.
+	tcpProxy.Shutdown()
 }
