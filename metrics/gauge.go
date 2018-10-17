@@ -12,6 +12,6 @@ func NewUint64Gauge(measure func() uint64) *Uint64Gauge {
 	return &Uint64Gauge{measure}
 }
 
-func (g *Uint64Gauge) Value() uint64 {
+func (g *Uint64Gauge) Value() interface{} {
 	return g.measure()
 }
