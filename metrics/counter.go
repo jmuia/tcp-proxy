@@ -4,8 +4,12 @@ import "sync/atomic"
 
 type Counter interface {
 	Count() uint64
-	Incr()
-	Add(delta uint64)
+	Incr() uint64
+	Add(delta uint64) uint64
+}
+
+func NewCounter() Counter {
+	return &counter{0}
 }
 
 // TODO: consider a cell-based counter similar to JDK LongAdder.
