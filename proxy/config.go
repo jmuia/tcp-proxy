@@ -8,9 +8,10 @@ import (
 )
 
 type Config struct {
-	Laddr    string
-	Timeout  time.Duration
-	Backends []string
-	Health   health.HealthCheckConfig
-	Lb       loadbalancer.Config
+	Laddr       string
+	Timeout     time.Duration
+	Backends    []string
+	Health      health.HealthCheckConfig
+	Lb          loadbalancer.Config
+	GracePeriod time.Duration
 }

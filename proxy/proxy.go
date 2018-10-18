@@ -127,6 +127,11 @@ func (t *TCPProxy) Stats() map[string]interface{} {
 func (t *TCPProxy) exit() {
 	if t.ln != nil {
 		t.ln.Close()
+		// Poor man's graceful shutdown.
+		// TODO: proper connection counting.
+		if t.cfg.GracePeriod > 0 {
+			time.Sleep(t.cfg.GracePeriod)
+		}
 	}
 	t.registry.EvictAll()
 	close(t.exitc)

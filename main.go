@@ -63,6 +63,8 @@ func cli() *proxy.Config {
 
 	cfg.Backends = flag.Args()
 
+	cfg.GracePeriod = 5 * time.Second
+
 	cfg.Health = health.HealthCheckConfig{
 		Timeout:            1 * time.Second,
 		Interval:           5 * time.Second,
