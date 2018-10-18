@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"syscall"
+	"sort"
 	"time"
 
 	"github.com/jmuia/tcp-proxy/health"
@@ -22,14 +22,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	signalc := make(chan os.Signal)
-	signal.Notify(signalc, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		for range signalc {
-			fmt.Println()
-			tcpProxy.Shutdown()
-		}
-	}()
+	handleExitSignal(tcpProxy)
+	handleStatsSignal(tcpProxy)
 
 	err = tcpProxy.Run()
 	if err != nil {
@@ -97,4 +91,38 @@ func (v *lbTypeValue) Set(s string) error {
 	}
 	*v = lbTypeValue(t)
 	return nil
+}
+
+func sorted(m map[string]interface{}) []string {
+	var keys []string
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func handleExitSignal(tcpProxy *proxy.TCPProxy) {
+	exitc := make(chan os.Signal)
+	signal.Notify(exitc, exitSignals...)
+	go func() {
+		for range exitc {
+			fmt.Println()
+			tcpProxy.Shutdown()
+		}
+	}()
+}
+
+func handleStatsSignal(tcpProxy *proxy.TCPProxy) {
+	statsc := make(chan os.Signal)
+	signal.Notify(statsc, statsSignals...)
+	go func() {
+		for range statsc {
+			fmt.Println()
+			stats := tcpProxy.Stats()
+			for _, k := range sorted(stats) {
+				fmt.Printf("%s: %v\n", k, stats[k])
+			}
+		}
+	}()
 }
