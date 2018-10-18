@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jmuia/tcp-proxy/health"
 	"github.com/jmuia/tcp-proxy/loadbalancer"
 	proxytesting "github.com/jmuia/tcp-proxy/testing"
 	"github.com/pkg/errors"
@@ -24,25 +23,9 @@ func TestProxy(t *testing.T) {
 	defer backendListener.Close()
 
 	// Set up proxy.
-	proxyConfig := Config{
-		Laddr:    "localhost:0",
-		Timeout:  1 * time.Second,
-		Backends: []string{backendListener.Addr().String()},
-		Health: health.HealthCheckConfig{
-			Timeout:            1 * time.Second,
-			Interval:           5 * time.Second,
-			UnhealthyThreshold: 3,
-			HealthyThreshold:   3,
-		},
-		Lb: loadbalancer.Config{loadbalancer.P2C_TYPE},
-	}
+	tcpProxy := newSimpleTCPProxy(t, []string{backendListener.Addr().String()})
 
-	tcpProxy, err := NewTCPProxy(proxyConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = tcpProxy.Start()
+	err := tcpProxy.Start()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,39 +82,10 @@ func TestProxy(t *testing.T) {
 	time.Sleep(1 * time.Second)
 }
 
-func assertSendAndReceiveMessage(s net.Conn, r net.Conn, msg string) error {
-	_, err := io.WriteString(s, msg)
-	if err != nil {
-		return err
-	}
-
-	buf := make([]byte, len(msg))
-	_, err = io.ReadFull(r, buf)
-	if err != nil {
-		return err
-	}
-
-	if string(buf) != msg {
-		errMsg := fmt.Sprintf("expected %q != actual %q", msg, buf)
-		return errors.New(errMsg)
-	}
-
-	return nil
-}
-
 func TestShutdownNoConnections(t *testing.T) {
-	proxyConfig := Config{
-		Laddr:   "localhost:0",
-		Timeout: 1 * time.Second,
-		Lb:      loadbalancer.Config{loadbalancer.P2C_TYPE},
-	}
+	tcpProxy := newSimpleTCPProxy(t, []string{})
 
-	tcpProxy, err := NewTCPProxy(proxyConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = tcpProxy.Start()
+	err := tcpProxy.Start()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,18 +104,9 @@ func TestShutdownNoConnections(t *testing.T) {
 }
 
 func TestCannotStartTwice(t *testing.T) {
-	proxyConfig := Config{
-		Laddr:   "localhost:0",
-		Timeout: 1 * time.Second,
-		Lb:      loadbalancer.Config{loadbalancer.P2C_TYPE},
-	}
+	tcpProxy := newSimpleTCPProxy(t, []string{})
 
-	tcpProxy, err := NewTCPProxy(proxyConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = tcpProxy.Start()
+	err := tcpProxy.Start()
 	defer tcpProxy.Shutdown()
 	if err != nil {
 		t.Fatal(err)
@@ -174,18 +119,9 @@ func TestCannotStartTwice(t *testing.T) {
 }
 
 func TestIdempotentShutdown(t *testing.T) {
-	proxyConfig := Config{
-		Laddr:   "localhost:0",
-		Timeout: 1 * time.Second,
-		Lb:      loadbalancer.Config{loadbalancer.P2C_TYPE},
-	}
+	tcpProxy := newSimpleTCPProxy(t, []string{})
 
-	tcpProxy, err := NewTCPProxy(proxyConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = tcpProxy.Start()
+	err := tcpProxy.Start()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,4 +130,38 @@ func TestIdempotentShutdown(t *testing.T) {
 
 	// Calling shutdown a second time is ok.
 	tcpProxy.Shutdown()
+}
+
+func newSimpleTCPProxy(t *testing.T, backends []string) *TCPProxy {
+	proxyConfig := Config{
+		Laddr:    "localhost:0",
+		Timeout:  1 * time.Second,
+		Backends: backends,
+		Lb:       loadbalancer.Config{loadbalancer.P2C_TYPE},
+	}
+	tcpProxy, err := NewTCPProxy(proxyConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tcpProxy
+}
+
+func assertSendAndReceiveMessage(s net.Conn, r net.Conn, msg string) error {
+	_, err := io.WriteString(s, msg)
+	if err != nil {
+		return err
+	}
+
+	buf := make([]byte, len(msg))
+	_, err = io.ReadFull(r, buf)
+	if err != nil {
+		return err
+	}
+
+	if string(buf) != msg {
+		errMsg := fmt.Sprintf("expected %q != actual %q", msg, buf)
+		return errors.New(errMsg)
+	}
+
+	return nil
 }
