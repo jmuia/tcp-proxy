@@ -33,6 +33,8 @@ Usage: ./tcp-proxy [OPTIONS] <BACKEND>...
   -timeout duration
     	backend dial timeout (default 3s)
 
+Metrics: send SIGINFO (ctrl-t) or SIGUSR1
+
 Example:
   ./tcp-proxy \
 	-laddr localhost:4000 \
@@ -67,6 +69,9 @@ $ docker-compose logs -f
 # Send some data; check the backend that
 # served the connection in the logs.
 $ nc localhost 4000
+
+# Dump metrics.
+$ docker-compose kill -s SIGUSR1
 
 # Try using seq and xargs to spam some messages (OS X syntax).
 $ seq 1 | xargs -I{} -L1 -P 10 sh -c 'echo hi {}! | nc -i1 localhost 4000'

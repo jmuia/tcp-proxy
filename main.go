@@ -40,6 +40,9 @@ func cli() *proxy.Config {
 		flag.PrintDefaults()
 		fmt.Println()
 
+		fmt.Println("Metrics: send SIGINFO (ctrl-t) or SIGUSR1")
+		fmt.Println()
+
 		fmt.Println("Example:")
 		fmt.Println("  ./tcp-proxy \\")
 		fmt.Println("\t-laddr localhost:4000 \\")
