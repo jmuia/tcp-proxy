@@ -71,7 +71,7 @@ $ docker-compose logs -f
 $ nc localhost 4000
 
 # Dump metrics.
-$ docker-compose kill -s SIGUSR1
+$ docker-compose kill -s SIGUSR1 tcp-proxy
 
 # Try using seq and xargs to spam some messages (OS X syntax).
 $ seq 1 | xargs -I{} -L1 -P 10 sh -c 'echo hi {}! | nc -i1 localhost 4000'
