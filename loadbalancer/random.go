@@ -7,6 +7,7 @@ import (
 
 	"github.com/jmuia/tcp-proxy/backend"
 	logger "github.com/jmuia/tcp-proxy/logging"
+	"github.com/pkg/errors"
 )
 
 type Random struct {
@@ -45,11 +46,17 @@ func (lb *Random) UpdateBackend(s *backend.Backend) {
 	}
 }
 
-func (lb *Random) NextBackend(c net.Conn) *backend.Backend {
+func (lb *Random) NextBackend(c net.Conn) (*backend.Backend, error) {
 	lb.lock.RLock()
 	defer lb.lock.RUnlock()
-	// TODO: error if no healthy backends.
-	return lb.backendList[rand.Intn(len(lb.backendList))]
+	switch len(lb.backendList) {
+	case 0:
+		return nil, errors.New("loadbalancer: no healthy backends available")
+	case 1:
+		return lb.backendList[0], nil
+	default:
+		return lb.backendList[rand.Intn(len(lb.backendList))], nil
+	}
 }
 
 func (lb *Random) remove(index int) {

@@ -7,6 +7,6 @@ import (
 )
 
 type LoadBalancer interface {
-	NextBackend(c net.Conn) *backend.Backend
+	NextBackend(c net.Conn) (*backend.Backend, error)
 	UpdateBackend(s *backend.Backend)
 }

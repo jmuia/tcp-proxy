@@ -158,7 +158,11 @@ func (t *TCPProxy) acceptConns() {
 func (t *TCPProxy) handleConn(src net.Conn) {
 	defer src.Close()
 
-	backend := t.lb.NextBackend(src)
+	backend, err := t.lb.NextBackend(src)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
 
 	dst, err := net.DialTimeout("tcp", backend.Addr(), t.cfg.Timeout)
 	if err != nil {

@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/jmuia/tcp-proxy/backend"
+	"github.com/pkg/errors"
 )
 
 type P2C struct {
@@ -19,13 +20,15 @@ func (lb *P2C) UpdateBackend(s *backend.Backend) {
 	lb.random.UpdateBackend(s)
 }
 
-func (lb *P2C) NextBackend(c net.Conn) *backend.Backend {
+func (lb *P2C) NextBackend(c net.Conn) (*backend.Backend, error) {
 	lb.random.lock.RLock()
 	defer lb.random.lock.RUnlock()
 
-	// TODO: error if no healthy backends.
-	if len(lb.random.backendList) <= 1 {
-		return lb.random.backendList[0]
+	switch len(lb.random.backendList) {
+	case 0:
+		return nil, errors.New("loadbalancer: no healthy backends available")
+	case 1:
+		return lb.random.backendList[0], nil
 	}
 
 	for {
@@ -40,8 +43,8 @@ func (lb *P2C) NextBackend(c net.Conn) *backend.Backend {
 		srv2 := lb.random.backendList[choice2]
 
 		if srv1.ActiveConns() > srv2.ActiveConns() {
-			return srv2
+			return srv2, nil
 		}
-		return srv1
+		return srv1, nil
 	}
 }
