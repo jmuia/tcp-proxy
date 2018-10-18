@@ -15,3 +15,15 @@ func NewUint64Gauge(measure func() uint64) *Uint64Gauge {
 func (g *Uint64Gauge) Value() interface{} {
 	return g.measure()
 }
+
+type StringGauge struct {
+	measure func() string
+}
+
+func NewStringGauge(measure func() string) *StringGauge {
+	return &StringGauge{measure}
+}
+
+func (g *StringGauge) Value() interface{} {
+	return g.measure()
+}

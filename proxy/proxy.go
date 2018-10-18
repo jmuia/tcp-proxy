@@ -80,6 +80,7 @@ func (t *TCPProxy) Start() error {
 			return errors.Wrapf(err, "failed to register %s", b)
 		}
 		t.stats.backendActiveConnsGauge(backend)
+		t.stats.backendHealthGauge(backend)
 	}
 
 	swapped = AtomicCompareAndSwap(&t.state, STARTING, RUNNING)

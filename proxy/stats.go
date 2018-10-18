@@ -60,6 +60,13 @@ func (ps *proxyStats) backendActiveConnsGauge(backend *backend.Backend) {
 	ps.registry.Register("backend."+backend.Addr()+".active_connections", gauge)
 }
 
+func (ps *proxyStats) backendHealthGauge(backend *backend.Backend) {
+	gauge := metrics.NewStringGauge(func() string {
+		return backend.State().String()
+	})
+	ps.registry.Register("backend."+backend.Addr()+".state", gauge)
+}
+
 // TODO: don't pessimistically create new metrics.
 // Most of the time they'll already exist.
 func (ps *proxyStats) incrIoStats(name string, stats *ioStats) {
