@@ -54,7 +54,6 @@ func TestUpdates(t *testing.T) {
 	}
 
 	// Removing backend2 publishes an update.
-	// TODO: it should probably provide context about its removal.
 	registry.Remove(backend2.Addr().String())
 	update = <-updatec
 	if updateState != UNHEALTHY || update.Addr() != backend2.Addr().String() {
@@ -102,6 +101,34 @@ func TestAddingAndRemoving(t *testing.T) {
 	snapshot = registry.Snapshot()
 	if len(snapshot) != 0 {
 		t.Errorf("expected 0 backends in the registry, was %d: %v", len(snapshot), snapshot)
+	}
+}
+
+func TestNoHealthConfig(t *testing.T) {
+	registry := NewRegistry(health.HealthCheckConfig{})
+	defer registry.EvictAll()
+
+	updatec := make(chan Backend)
+	registry.RegisterUpdateListener(func(backend *Backend) {
+		updatec <- *backend
+	})
+
+	// Still receive an update for adding the backend.
+	registry.Add("localhost:12345")
+	update := <-updatec
+	updateState := update.State()
+	if updateState != HEALTHY {
+		t.Errorf("update expected to indicate HEALTHY, was %s", updateState.String())
+	}
+
+	// TODO: test lack of event for health change.
+
+	// Still receive an update for removing the backend.
+	registry.Remove("localhost:12345")
+	update = <-updatec
+	updateState = update.State()
+	if updateState != UNHEALTHY {
+		t.Errorf("update expected to indicate UNHEALTHY, was %s", updateState.String())
 	}
 }
 

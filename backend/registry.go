@@ -45,18 +45,21 @@ func (r *Registry) Add(addr string) error {
 
 	// TODO: perform an initial health check rather than assuming healthy.
 	r.backends[addr] = &Backend{addr, HEALTHY, 0}
-	r.monitors[addr] = NewHealthMonitor(r.backends[addr], r.cfg)
-	r.monitors[addr].AddHealthCheck(health.NewTCPHealthCheck(addr, r.cfg.Timeout))
-	r.monitors[addr].RegisterUpdateListener(func(b *Backend) {
-		r.aggr <- b
-	})
-	err := r.monitors[addr].Monitor()
-	if err != nil {
-		r.remove(addr)
-	} else {
-		go func() { r.aggr <- r.backends[addr] }()
+
+	if r.cfg != (health.HealthCheckConfig{}) {
+		r.monitors[addr] = NewHealthMonitor(r.backends[addr], r.cfg)
+		r.monitors[addr].AddHealthCheck(health.NewTCPHealthCheck(addr, r.cfg.Timeout))
+		r.monitors[addr].RegisterUpdateListener(func(b *Backend) {
+			r.aggr <- b
+		})
+		err := r.monitors[addr].Monitor()
+		if err != nil {
+			r.remove(addr)
+			return err
+		}
 	}
-	return err
+	go func() { r.aggr <- r.backends[addr] }()
+	return nil
 }
 
 func (r *Registry) Remove(addr string) {
@@ -92,6 +95,9 @@ func (r *Registry) EvictAll() {
 func (r *Registry) remove(addr string) {
 	b, exists := r.backends[addr]
 	if exists {
+		// TODO: it should probably provide
+		// better context about its removal.
+		b.SetState(UNHEALTHY)
 		go func() { r.aggr <- b }()
 		delete(r.backends, addr)
 	}
