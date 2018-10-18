@@ -26,24 +26,18 @@ func TestProxy(t *testing.T) {
 	tcpProxy := newSimpleTCPProxy(t, []string{backendListener.Addr().String()})
 
 	err := tcpProxy.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
 	defer tcpProxy.Shutdown()
+	check(t, err)
 
 	// Connect to the proxy as a client.
 	client, err := net.Dial("tcp", tcpProxy.ln.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
 	defer client.Close()
+	check(t, err)
 
 	// Accept the connection from the proxy to the backend.
 	backend, err := backendListener.Accept()
-	if err != nil {
-		t.Fatal(err)
-	}
 	defer backend.Close()
+	check(t, err)
 
 	// Concurrently send messages back and forth,
 	// tracking the first error that occurs.
@@ -71,9 +65,7 @@ func TestProxy(t *testing.T) {
 	wg.Wait()
 	close(errc)
 	err = <-errc
-	if err != nil {
-		t.Fatal(err)
-	}
+	check(t, err)
 	backend.Close()
 	client.Close()
 
@@ -86,9 +78,7 @@ func TestShutdownNoConnections(t *testing.T) {
 	tcpProxy := newSimpleTCPProxy(t, []string{})
 
 	err := tcpProxy.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
+	check(t, err)
 
 	donec := make(chan struct{})
 	go func() {
@@ -108,9 +98,7 @@ func TestCannotStartTwice(t *testing.T) {
 
 	err := tcpProxy.Start()
 	defer tcpProxy.Shutdown()
-	if err != nil {
-		t.Fatal(err)
-	}
+	check(t, err)
 
 	err = tcpProxy.Start()
 	if err == nil {
@@ -122,9 +110,7 @@ func TestIdempotentShutdown(t *testing.T) {
 	tcpProxy := newSimpleTCPProxy(t, []string{})
 
 	err := tcpProxy.Start()
-	if err != nil {
-		t.Fatal(err)
-	}
+	check(t, err)
 
 	tcpProxy.Shutdown()
 
@@ -164,4 +150,91 @@ func assertSendAndReceiveMessage(s net.Conn, r net.Conn, msg string) error {
 	}
 
 	return nil
+}
+
+func TestClosesClientConnectionOnBackendError(t *testing.T) {
+	// Set up proxy.
+	tcpProxy := newSimpleTCPProxy(t, []string{})
+
+	err := tcpProxy.Start()
+	defer tcpProxy.Shutdown()
+	check(t, err)
+
+	// Connect to the proxy as a client -- but there are no healthy backends!
+	client, err := net.Dial("tcp", tcpProxy.ln.Addr().String())
+	defer client.Close()
+	check(t, err)
+}
+
+func TestStats(t *testing.T) {
+	// Set up a backend to proxy to.
+	backendListener := proxytesting.NewLocalListener(t)
+	defer backendListener.Close()
+
+	// Set up proxy.
+	tcpProxy := newSimpleTCPProxy(t, []string{backendListener.Addr().String()})
+
+	err := tcpProxy.Start()
+	defer tcpProxy.Shutdown()
+	check(t, err)
+
+	// Check active connections.
+	stats := tcpProxy.Stats()
+	backendMetricPrefix := "backend." + backendListener.Addr().String() + "."
+	assertMetric(t, stats, backendMetricPrefix+"active_connections", uint64(0))
+
+	// Connect to the proxy as a client.
+	client, err := net.Dial("tcp", tcpProxy.ln.Addr().String())
+	defer client.Close()
+	check(t, err)
+
+	// Accept the connection from the proxy to the backend.
+	backend, err := backendListener.Accept()
+	defer backend.Close()
+	check(t, err)
+
+	// Check stats.
+	time.Sleep(1 * time.Millisecond)
+	stats = tcpProxy.Stats()
+	assertMetric(t, stats, backendMetricPrefix+"active_connections", uint64(1))
+	assertMetric(t, stats, "requests", uint64(1))
+
+	// Send data back and forth.
+	check(t, assertSendAndReceiveMessage(client, backend, "hi!"))
+	check(t, assertSendAndReceiveMessage(backend, client, "hello!"))
+	backend.Close()
+	client.Close()
+
+	// Check stats.
+	time.Sleep(1 * time.Millisecond)
+	stats = tcpProxy.Stats()
+	assertMetric(t, stats, backendMetricPrefix+"active_connections", uint64(0))
+	assertMetric(t, stats, "frontend.io.rx", uint64(len("hi!")))
+	assertMetric(t, stats, "frontend.io.tx", uint64(len("hello!")))
+	assertMetric(t, stats, backendMetricPrefix+"io.tx", uint64(len("hi!")))
+	assertMetric(t, stats, backendMetricPrefix+"io.rx", uint64(len("hello!")))
+
+	// Connect to the proxy as a client -- but the backend is down!
+	backendListener.Close()
+	client, err = net.Dial("tcp", tcpProxy.ln.Addr().String())
+	defer client.Close()
+	check(t, err)
+
+	// Check stats.
+	time.Sleep(1 * time.Millisecond)
+	stats = tcpProxy.Stats()
+	assertMetric(t, stats, "requests", uint64(2))
+	assertMetric(t, stats, "errors", uint64(1))
+}
+
+func assertMetric(t *testing.T, stats map[string]interface{}, name string, expected interface{}) {
+	if stats[name] != expected {
+		t.Errorf("expected %s to be %v, was %v: %v", name, expected, stats[name], stats)
+	}
+}
+
+func check(t *testing.T, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
 }

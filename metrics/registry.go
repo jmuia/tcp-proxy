@@ -1,16 +1,20 @@
 package metrics
 
 import (
+	"fmt"
 	"sync"
-)
 
-var GlobalRegistry = NewRegistry()
+	"github.com/pkg/errors"
+)
 
 type Registry interface {
 	Register(name string, metric Metric)
+	LoadOrRegisterCounter(name string, counter Counter) (Counter, error)
+	LoadOrRegisterGauge(name string, gauge Gauge) (Gauge, error)
 	All() map[string]Metric
 	Counters() map[string]Counter
 	Gauges() map[string]Gauge
+	Clear()
 }
 
 func NewRegistry() Registry {
@@ -23,6 +27,24 @@ type registry struct {
 
 func (r *registry) Register(name string, metric Metric) {
 	r.metrics.Store(name, metric)
+}
+
+func (r *registry) LoadOrRegisterCounter(name string, counter Counter) (Counter, error) {
+	m, _ := r.metrics.LoadOrStore(name, counter)
+	c, ok := m.(Counter)
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("metric named %s is not a Counter", name))
+	}
+	return c, nil
+}
+
+func (r *registry) LoadOrRegisterGauge(name string, gauge Gauge) (Gauge, error) {
+	m, _ := r.metrics.LoadOrStore(name, gauge)
+	g, ok := m.(Gauge)
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("metric named %s is not a Gauge", name))
+	}
+	return g, nil
 }
 
 func (r *registry) All() map[string]Metric {
@@ -59,4 +81,11 @@ func (r *registry) Gauges() map[string]Gauge {
 		return true
 	})
 	return gauges
+}
+
+func (r *registry) Clear() {
+	r.metrics.Range(func(key, value interface{}) bool {
+		r.metrics.Delete(key)
+		return true
+	})
 }

@@ -38,7 +38,7 @@ func NewRegistry(cfg health.HealthCheckConfig) *Registry {
 	return r
 }
 
-func (r *Registry) Add(addr string) error {
+func (r *Registry) Add(addr string) (*Backend, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.remove(addr)
@@ -55,11 +55,11 @@ func (r *Registry) Add(addr string) error {
 		err := r.monitors[addr].Monitor()
 		if err != nil {
 			r.remove(addr)
-			return err
+			return nil, err
 		}
 	}
 	go func() { r.aggr <- r.backends[addr] }()
-	return nil
+	return r.backends[addr], nil
 }
 
 func (r *Registry) Remove(addr string) {

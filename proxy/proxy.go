@@ -23,6 +23,7 @@ type TCPProxy struct {
 	state     State
 	lb        loadbalancer.LoadBalancer
 	registry  *backend.Registry
+	stats     *proxyStats
 	shutdownc chan struct{}
 	exitc     chan error
 }
@@ -42,6 +43,7 @@ func NewTCPProxy(cfg Config) (*TCPProxy, error) {
 		cfg:       cfg,
 		state:     NEW,
 		lb:        lb,
+		stats:     newProxyStats(),
 		shutdownc: make(chan struct{}),
 		exitc:     make(chan error, 1),
 	}, nil
@@ -72,11 +74,12 @@ func (t *TCPProxy) Start() error {
 		t.lb.UpdateBackend(backend)
 	})
 	for _, b := range t.cfg.Backends {
-		err := t.registry.Add(b)
+		backend, err := t.registry.Add(b)
 		if err != nil {
 			t.Shutdown()
 			return errors.Wrapf(err, "failed to register %s", b)
 		}
+		t.stats.backendActiveConnsGauge(backend)
 	}
 
 	swapped = AtomicCompareAndSwap(&t.state, STARTING, RUNNING)
@@ -107,6 +110,17 @@ func (t *TCPProxy) Run() error {
 		return err
 	}
 	return <-t.exitc
+}
+
+func (t *TCPProxy) Stats() map[string]interface{} {
+	stats := make(map[string]interface{})
+	for name, counter := range t.stats.registry.Counters() {
+		stats[name] = counter.Count()
+	}
+	for name, gauge := range t.stats.registry.Gauges() {
+		stats[name] = gauge.Value()
+	}
+	return stats
 }
 
 func (t *TCPProxy) exit() {
@@ -150,6 +164,7 @@ func (t *TCPProxy) acceptConns() {
 				return
 			}
 			logger.Info("accepted connection from ", src.RemoteAddr())
+			t.stats.incrRequests()
 			go t.handleConn(src)
 		}
 	}
@@ -161,6 +176,7 @@ func (t *TCPProxy) handleConn(src net.Conn) {
 	backend, err := t.lb.NextBackend(src)
 	if err != nil {
 		logger.Error(err)
+		t.stats.incrErrors()
 		return
 	}
 
@@ -168,6 +184,7 @@ func (t *TCPProxy) handleConn(src net.Conn) {
 	if err != nil {
 		// TODO: attempt a different backend.
 		logger.Error(errors.Wrapf(err, "error dialing backend %v", backend))
+		t.stats.incrErrors()
 		return
 	}
 	defer dst.Close()
@@ -177,33 +194,41 @@ func (t *TCPProxy) handleConn(src net.Conn) {
 
 	logger.Infof("opened connection to %s (%d active)", dst.RemoteAddr(), activeConns)
 
-	t.proxyConn(src, dst)
+	stats, err := t.proxyConn(src, dst)
+	if err != nil {
+		logger.Error(err)
+		t.stats.incrErrors()
+	}
+	t.stats.incrBackendIoStats(backend.Addr(), stats.backend)
+	t.stats.incrFrontendIoStats(stats.frontend)
 }
 
-func (t *TCPProxy) proxyConn(src net.Conn, dst net.Conn) {
-	// Adding a buffer means that a goroutine can send a value
-	// before there is a receiver.
-	// We only receive one value on this channel, but the buffer
-	// allows the second goroutine to send its value and exit.
-	errc := make(chan error, 1)
+func (t *TCPProxy) proxyConn(src net.Conn, dst net.Conn) (*proxyIoStats, error) {
+	errc := make(chan error, 2)
 
-	copy := func(dst net.Conn, src net.Conn) {
+	copy := func(dst net.Conn, src net.Conn, tx *uint64, rx *uint64) {
 		bytes, err := io.Copy(dst, src)
 		logger.Infof("proxied %v bytes from %v to %v", bytes, src.RemoteAddr(), dst.RemoteAddr())
+		*tx = uint64(bytes)
+		*rx = uint64(bytes)
 		errc <- err
 	}
 
-	go copy(dst, src)
-	go copy(src, dst)
+	stats := newProxyIoStats()
+	go copy(dst, src, &stats.backend.tx, &stats.frontend.rx)
+	go copy(src, dst, &stats.frontend.tx, &stats.backend.rx)
 
 	// Await an error or EOF from either goroutine.
 	// The caller will close both connections, with the
 	// consequence of causing the other (likely blocked)
-	// goroutine to continue executing.
+	// goroutine to continue executing. We ignore the
+	// second error, if any.
 	err := <-errc
 	if err != nil {
-		logger.Error(errors.Wrapf(err, "error proxying data from %v to %v", src.RemoteAddr(), dst.RemoteAddr()))
+		err = errors.Wrapf(err, "error proxying data from %v to %v", src.RemoteAddr(), dst.RemoteAddr())
 	}
+	<-errc
+	return stats, err
 }
 
 func isTimeout(err error) bool {
