@@ -171,12 +171,11 @@ func (t *TCPProxy) acceptConns() {
 }
 
 func (t *TCPProxy) handleConn(src net.Conn) {
-	defer src.Close()
-
 	backend, err := t.lb.NextBackend(src)
 	if err != nil {
 		logger.Error(err)
 		t.stats.incrErrors()
+		src.Close()
 		return
 	}
 
@@ -185,15 +184,16 @@ func (t *TCPProxy) handleConn(src net.Conn) {
 		// TODO: attempt a different backend.
 		logger.Error(errors.Wrapf(err, "error dialing backend %v", backend))
 		t.stats.incrErrors()
+		src.Close()
 		return
 	}
-	defer dst.Close()
 
 	activeConns := backend.IncrActiveConns()
 	defer backend.DecrActiveConns()
 
 	logger.Infof("opened connection to %s (%d active)", dst.RemoteAddr(), activeConns)
 
+	// proxyConn will close the connections.
 	stats, err := t.proxyConn(src, dst)
 	if err != nil {
 		logger.Error(err)
@@ -212,6 +212,8 @@ func (t *TCPProxy) proxyConn(src net.Conn, dst net.Conn) (*proxyIoStats, error) 
 		*tx = uint64(bytes)
 		*rx = uint64(bytes)
 		errc <- err
+		src.Close()
+		dst.Close()
 	}
 
 	stats := newProxyIoStats()
@@ -219,7 +221,7 @@ func (t *TCPProxy) proxyConn(src net.Conn, dst net.Conn) (*proxyIoStats, error) 
 	go copy(src, dst, &stats.frontend.tx, &stats.backend.rx)
 
 	// Await an error or EOF from either goroutine.
-	// The caller will close both connections, with the
+	// The first to exit will close both connections, with the
 	// consequence of causing the other (likely blocked)
 	// goroutine to continue executing. We ignore the
 	// second error, if any.
@@ -227,6 +229,8 @@ func (t *TCPProxy) proxyConn(src net.Conn, dst net.Conn) (*proxyIoStats, error) 
 	if err != nil {
 		err = errors.Wrapf(err, "error proxying data from %v to %v", src.RemoteAddr(), dst.RemoteAddr())
 	}
+
+	// TODO: maybe select here as safeguard against blocking.
 	<-errc
 	return stats, err
 }
