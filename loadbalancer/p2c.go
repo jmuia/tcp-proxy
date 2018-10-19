@@ -8,6 +8,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+/**
+ * P2C (power of two choices) load balancing.
+ * https://brooker.co.za/blog/2012/01/17/two-random.html
+ *
+ * Note: the benefits of this approach are not that useful
+ * in this project because we're not operating on cached
+ * connection count data. It still outperforms random,
+ * however.
+ */
 type P2C struct {
 	random *Random
 }
