@@ -17,11 +17,13 @@ A trial by fire in learning Go idioms and concurrency patterns.
 - Service discovery via static configuration.
 
 ## Non-Features
+- Passthrough.
 - Direct server return.
 - Robust connection tracking.
 - Consistent hashing fallback.
 - TLS termination.
 - SNI-based routing.
+- Rate limiting.
 
 ## Usage
 ```
